@@ -319,7 +319,7 @@ int main() {
         int screenWidth = GetScreenWidth();
         int screenHeight = GetScreenHeight();
         camera.offset = {screenWidth / 2.0f, screenHeight / 2.0f};
-        const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f, 692.0f};
+        const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f, 732.0f};
         Vector2 mouseScreen = GetMousePosition();
         Vector2 mouseWorld = GetScreenToWorld2D(mouseScreen, camera);
         bool mouseOverUI = CheckCollisionPointRec(mouseScreen, panel) || draggingSlider ||
@@ -392,6 +392,18 @@ int main() {
         if (IsKeyPressed(KEY_G)) gridOn = !gridOn;
         if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
         if (IsKeyPressed(KEY_M)) mergeOn = !mergeOn;
+
+        auto centerOnBodies = [&]() {
+            if (bodies.empty()) return;
+            Vector2 com = {0, 0};
+            float totalMass = 0;
+            for (const Body& b : bodies) {
+                com = Vector2Add(com, Vector2Scale(b.pos, b.mass));
+                totalMass += b.mass;
+            }
+            camera.target = Vector2Scale(com, 1.0f / totalMass);
+        };
+        if (IsKeyPressed(KEY_H)) centerOnBodies();
         if (IsKeyPressed(KEY_R)) {
             camera.target = {0, 0};
             camera.zoom = 1.0f;
@@ -498,6 +510,8 @@ int main() {
             camera.target = {0, 0};
             camera.zoom = 1.0f;
         }
+        y += 40;
+        if (UIButton({px, y, pw, 32}, "Center Bodies (H)")) centerOnBodies();
         y += 40;
         if (UIButton({px, y, pw, 32}, "Fullscreen (F)")) ToggleBorderlessWindowed();
         y += 48;
