@@ -2,6 +2,8 @@
 
 An interactive Newtonian gravity simulator written in C++ with [raylib](https://github.com/raysan5/raylib).
 
+![Gravity Sandbox — a spiral galaxy with orbital trails](screenshot.png)
+
 Place dots of any mass on an infinite canvas and watch them attract, orbit, slingshot, and merge. Spawn preset systems — solar systems, binary stars, colliding galaxies, a stable three-body figure-eight — with a live preview at your cursor, and fly around the space with pan and zoom.
 
 ## Features
@@ -45,8 +47,8 @@ raylib is vendored as a git submodule and built from source — no system-wide i
 ### Quick start (macOS / Linux)
 
 ```sh
-git clone <repo-url>
-cd gravity-sandbox
+git clone https://github.com/siddharthroy12/gravitysandbox.git
+cd gravitysandbox
 ./run.sh
 ```
 
