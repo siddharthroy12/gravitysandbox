@@ -30,37 +30,27 @@ static Color ColorForMass(float mass) {
     return ColorFromHSV(hue, 0.75f, 1.0f);
 }
 
-// ---------- UI theme ----------
+// ---------- UI theme (minimal dark, neutral grays) ----------
 
-static const Color UI_BG = {8, 14, 22, 235};             // deep blue-black
-static const Color UI_ACCENT = {0, 210, 255, 255};       // neon cyan
-static const Color UI_ACCENT_DIM = {0, 95, 125, 255};
-static const Color UI_VALUE = {170, 245, 255, 255};      // bright ice cyan
-static const Color UI_TEXT = {205, 232, 240, 255};
-static const Color UI_LABEL = {110, 150, 168, 255};
-static const Color UI_BTN_BG = {14, 26, 38, 255};
-static const Color UI_BTN_HOVER = {0, 62, 84, 255};
-static const Color UI_BTN_PRESS = {0, 95, 118, 255};
+static const Color UI_BG = {13, 13, 15, 248};
+static const Color UI_BORDER = {45, 45, 49, 255};
+static const Color UI_BORDER_LIT = {80, 80, 86, 255};
+static const Color UI_VALUE = {255, 255, 255, 255};
+static const Color UI_TEXT = {228, 228, 232, 255};
+static const Color UI_LABEL = {138, 138, 145, 255};
+static const Color UI_BTN_BG = {25, 25, 28, 255};
+static const Color UI_BTN_HOVER = {40, 40, 45, 255};
+static const Color UI_BTN_PRESS = {55, 55, 61, 255};
 
-// translucent panel with neon border and corner brackets
-static void DrawSciFiPanel(Rectangle r, Color accent) {
-    DrawRectangleRec(r, UI_BG);
-    DrawRectangleLinesEx(r, 1, Fade(accent, 0.35f));
-    const float len = 14, th = 2;
-    DrawRectangle((int)r.x, (int)r.y, (int)len, (int)th, accent);
-    DrawRectangle((int)r.x, (int)r.y, (int)th, (int)len, accent);
-    DrawRectangle((int)(r.x + r.width - len), (int)r.y, (int)len, (int)th, accent);
-    DrawRectangle((int)(r.x + r.width - th), (int)r.y, (int)th, (int)len, accent);
-    DrawRectangle((int)r.x, (int)(r.y + r.height - th), (int)len, (int)th, accent);
-    DrawRectangle((int)r.x, (int)(r.y + r.height - len), (int)th, (int)len, accent);
-    DrawRectangle((int)(r.x + r.width - len), (int)(r.y + r.height - th), (int)len, (int)th, accent);
-    DrawRectangle((int)(r.x + r.width - th), (int)(r.y + r.height - len), (int)th, (int)len, accent);
+static void DrawPanel(Rectangle r, Color border) {
+    float round = fminf(24.0f / fminf(r.width, r.height), 1.0f);   // ~12px corner radius
+    DrawRectangleRounded(r, round, 8, UI_BG);
+    DrawRectangleRoundedLinesEx(r, round, 8, 1, border);
 }
 
 static void UISectionHeader(const char* label, float x, float y, float width) {
-    DrawText(label, (int)x, (int)y, 18, Fade(UI_ACCENT, 0.85f));
-    int tw = MeasureText(label, 18);
-    DrawLineEx({x + tw + 10, y + 9}, {x + width, y + 9}, 1, Fade(UI_ACCENT, 0.25f));
+    (void)width;
+    DrawText(label, (int)x, (int)y, 18, UI_LABEL);
 }
 
 static void AddBody(std::vector<Body>& bodies, Vector2 pos, Vector2 vel, float mass) {
@@ -267,8 +257,8 @@ static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHei
     }
 
     // axes through the origin, slightly brighter
-    DrawLineEx({0, topLeft.y}, {0, bottomRight.y}, 1.5f / camera.zoom, Fade(UI_ACCENT, 0.3f));
-    DrawLineEx({topLeft.x, 0}, {bottomRight.x, 0}, 1.5f / camera.zoom, Fade(UI_ACCENT, 0.3f));
+    DrawLineEx({0, topLeft.y}, {0, bottomRight.y}, 1.5f / camera.zoom, Fade(WHITE, 0.18f));
+    DrawLineEx({topLeft.x, 0}, {bottomRight.x, 0}, 1.5f / camera.zoom, Fade(WHITE, 0.18f));
 }
 
 // ---------- immediate-mode UI ----------
@@ -278,33 +268,34 @@ static bool UIButton(Rectangle r, const char* label) {
     bool hover = CheckCollisionPointRec(m, r);
     Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
     if (hover && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) bg = UI_BTN_PRESS;
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 1, hover ? UI_ACCENT : Fade(UI_ACCENT, 0.3f));
-    DrawRectangle((int)r.x, (int)r.y, 3, (int)r.height, hover ? UI_ACCENT : UI_ACCENT_DIM);
+    float round = fminf(16.0f / fminf(r.width, r.height), 1.0f);
+    DrawRectangleRounded(r, round, 8, bg);
+    DrawRectangleRoundedLinesEx(r, round, 8, 1, hover ? UI_BORDER_LIT : UI_BORDER);
     int tw = MeasureText(label, 18);
     DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
-             hover ? WHITE : UI_TEXT);
+             hover ? UI_VALUE : UI_TEXT);
     return hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
 }
 
 static bool UIToggle(Rectangle r, const char* label, bool state) {
     Vector2 m = GetMousePosition();
     bool hover = CheckCollisionPointRec(m, r);
-    Color bg = state ? (Color){0, 52, 72, 255} : UI_BTN_BG;
-    if (hover) bg = state ? UI_BTN_PRESS : UI_BTN_HOVER;
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 1, state ? UI_ACCENT : Fade(UI_ACCENT, 0.3f));
-    // status LED on the right edge
-    Vector2 led = {r.x + r.width - 13, r.y + r.height / 2};
+    float round = fminf(16.0f / fminf(r.width, r.height), 1.0f);
     if (state) {
-        DrawCircleV(led, 7, Fade(UI_ACCENT, 0.25f));
-        DrawCircleV(led, 4, UI_ACCENT);
+        // filled: white pill with dark text, like a primary button
+        Color bg = hover ? (Color){215, 215, 218, 255} : (Color){235, 235, 238, 255};
+        DrawRectangleRounded(r, round, 8, bg);
+        int tw = MeasureText(label, 18);
+        DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
+                 (Color){18, 18, 20, 255});
     } else {
-        DrawCircleLinesV(led, 4, Fade(UI_ACCENT, 0.4f));
+        Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
+        DrawRectangleRounded(r, round, 8, bg);
+        DrawRectangleRoundedLinesEx(r, round, 8, 1, hover ? UI_BORDER_LIT : UI_BORDER);
+        int tw = MeasureText(label, 18);
+        DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
+                 UI_LABEL);
     }
-    int tw = MeasureText(label, 18);
-    DrawText(label, (int)(r.x + (r.width - 20 - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
-             state ? WHITE : UI_TEXT);
     return hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
 }
 
@@ -323,13 +314,13 @@ static float UISliderLog(Rectangle r, float value, float minV, float maxV, bool*
 
     float cy = r.y + r.height / 2;
     float kx = r.x + r.width * t;
-    DrawLineEx({r.x, cy}, {r.x + r.width, cy}, 2, (Color){20, 40, 55, 255});
-    DrawLineEx({r.x, cy}, {kx, cy}, 2, UI_ACCENT);
-    DrawLineEx({r.x, cy}, {kx, cy}, 6, Fade(UI_ACCENT, 0.18f));   // glow
-    // knob: bright core with halo ring
-    DrawCircleV({kx, cy}, (hover || *dragging) ? 10.0f : 8.0f, Fade(UI_ACCENT, 0.25f));
-    DrawCircleV({kx, cy}, 5, WHITE);
-    DrawCircleLinesV({kx, cy}, (hover || *dragging) ? 9.0f : 7.0f, UI_ACCENT);
+    DrawRectangleRounded({r.x, cy - 2, r.width, 4}, 1.0f, 4, (Color){55, 55, 60, 255});
+    DrawRectangleRounded({r.x, cy - 2, kx - r.x, 4}, 1.0f, 4, (Color){235, 235, 238, 255});
+    // square knob
+    float kh = (hover || *dragging) ? 20.0f : 18.0f;
+    Rectangle knob = {kx - 7, cy - kh / 2, 14, kh};
+    DrawRectangleRounded(knob, 0.35f, 4, WHITE);
+    DrawRectangleRoundedLinesEx(knob, 0.35f, 4, 1, (Color){120, 120, 126, 255});
     return value;
 }
 
@@ -500,7 +491,7 @@ int main() {
         EndMode2D();
 
         // ---- UI panel ----
-        DrawSciFiPanel(panel, UI_ACCENT);
+        DrawPanel(panel, UI_BORDER);
 
         float px = panel.x + 14, pw = panel.width - 28;
         float y = panel.y + 12;
@@ -568,7 +559,7 @@ int main() {
 
         // ---- info card (top-left) ----
         Rectangle info = {10, 10, 170, 70};
-        DrawSciFiPanel(info, UI_ACCENT);
+        DrawPanel(info, UI_BORDER);
         DrawText("FPS", (int)info.x + 14, (int)info.y + 13, 18, UI_LABEL);
         const char* fpsTxt = TextFormat("%d", GetFPS());
         DrawText(fpsTxt, (int)(info.x + info.width - 14 - MeasureText(fpsTxt, 18)),
@@ -584,8 +575,8 @@ int main() {
             int ptw = MeasureText(placeTxt, 20);
             Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, paused ? 58.0f : 10.0f,
                                 ptw + 36.0f, 40};
-            DrawSciFiPanel(banner, UI_ACCENT);
-            DrawText(placeTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, UI_ACCENT);
+            DrawPanel(banner, UI_BORDER_LIT);
+            DrawText(placeTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, UI_VALUE);
         }
 
         // ---- paused banner (top-center) ----
@@ -593,7 +584,7 @@ int main() {
             const char* pauseTxt = "PAUSED  -  SPACE to resume";
             int ptw = MeasureText(pauseTxt, 20);
             Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, 10, ptw + 36.0f, 40};
-            DrawSciFiPanel(banner, GOLD);
+            DrawPanel(banner, UI_BORDER_LIT);
             DrawText(pauseTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, GOLD);
         }
 
@@ -601,7 +592,7 @@ int main() {
         const char* hints = "Left click: place / drag     Right / middle drag: pan     Wheel: zoom     Space: pause";
         int htw = MeasureText(hints, 16);
         Rectangle hintBar = {10, screenHeight - 44.0f, htw + 28.0f, 34};
-        DrawSciFiPanel(hintBar, Fade(UI_ACCENT, 0.5f));
+        DrawPanel(hintBar, UI_BORDER);
         DrawText(hints, (int)(hintBar.x + 14), (int)(hintBar.y + 9), 16, UI_LABEL);
 
         EndDrawing();
