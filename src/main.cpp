@@ -312,7 +312,7 @@ static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int 
             if (!bodies[j].alive) continue;
             float dist = pairMinDist(i, j);
             float minDist = MassToRadius(bodies[i].mass) + MassToRadius(bodies[j].mass);
-            if (dist < minDist * 0.6f) {
+            if (dist < minDist) {
                 float m1 = bodies[i].mass, m2 = bodies[j].mass;
                 float totalMass = m1 + m2;
                 Body& big = (m1 >= m2) ? bodies[i] : bodies[j];
