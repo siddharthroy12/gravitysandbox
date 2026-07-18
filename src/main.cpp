@@ -483,7 +483,14 @@ int main() {
         BeginDrawing();
         ClearBackground(BLACK);
 
-        BeginMode2D(camera);
+        // raylib's BeginMode2D doesn't apply the HiDPI screen scale (screen-space
+        // drawing does), so render the world through a DPI-adjusted camera while
+        // keeping `camera` in logical units for all input math
+        Vector2 dpi = GetWindowScaleDPI();
+        Camera2D camRender = camera;
+        camRender.offset = {camera.offset.x * dpi.x, camera.offset.y * dpi.y};
+        camRender.zoom = camera.zoom * dpi.x;
+        BeginMode2D(camRender);
         if (gridOn) DrawSpaceGrid(camera, screenWidth, screenHeight);
         for (auto& b : bodies) {
             if (trailsOn && b.trail.size() > 1) {
