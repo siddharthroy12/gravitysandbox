@@ -276,8 +276,10 @@ static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int 
         }
     }
 
+    std::vector<Vector2> oldPos(n);
     for (size_t i = 0; i < n; i++) {
         if (!bodies[i].alive) continue;
+        oldPos[i] = bodies[i].pos;
         bodies[i].vel = Vector2Add(bodies[i].vel, Vector2Scale(accel[i], dt));
         bodies[i].pos = Vector2Add(bodies[i].pos, Vector2Scale(bodies[i].vel, dt));
 
@@ -291,12 +293,24 @@ static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int 
 
     // resolve overlapping bodies
     if (collisionMode == COLLIDE_NONE) return;
+
+    // closest approach of the pair's *relative* motion over this step, so fast
+    // bodies can't tunnel through each other between sampled positions
+    auto pairMinDist = [&](size_t i, size_t j) {
+        Vector2 a = Vector2Subtract(oldPos[i], oldPos[j]);
+        Vector2 b = Vector2Subtract(bodies[i].pos, bodies[j].pos);
+        Vector2 ab = Vector2Subtract(b, a);
+        float len2 = ab.x * ab.x + ab.y * ab.y;
+        float t = (len2 > 0) ? Clamp(-(a.x * ab.x + a.y * ab.y) / len2, 0.0f, 1.0f) : 0.0f;
+        return Vector2Length(Vector2Add(a, Vector2Scale(ab, t)));
+    };
+
     std::vector<Body> debris;
     for (size_t i = 0; i < n; i++) {
         if (!bodies[i].alive) continue;
         for (size_t j = i + 1; j < n; j++) {
             if (!bodies[j].alive) continue;
-            float dist = Vector2Distance(bodies[i].pos, bodies[j].pos);
+            float dist = pairMinDist(i, j);
             float minDist = MassToRadius(bodies[i].mass) + MassToRadius(bodies[j].mass);
             if (dist < minDist * 0.6f) {
                 float m1 = bodies[i].mass, m2 = bodies[j].mass;
