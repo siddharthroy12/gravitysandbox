@@ -42,6 +42,19 @@ static const Color UI_BTN_BG = {25, 25, 28, 255};
 static const Color UI_BTN_HOVER = {40, 40, 45, 255};
 static const Color UI_BTN_PRESS = {55, 55, 61, 255};
 
+static Font g_uiFont;
+static bool g_uiFontLoaded = false;
+
+static void UIText(const char* text, float x, float y, float size, Color c) {
+    if (g_uiFontLoaded) DrawTextEx(g_uiFont, text, {x, y}, size, 0, c);
+    else DrawText(text, (int)x, (int)y, (int)size, c);
+}
+
+static float UITextWidth(const char* text, float size) {
+    if (g_uiFontLoaded) return MeasureTextEx(g_uiFont, text, size, 0).x;
+    return (float)MeasureText(text, (int)size);
+}
+
 static void DrawPanel(Rectangle r, Color border) {
     DrawRectangleRec(r, UI_BG);
     DrawRectangleLinesEx(r, 1, border);
@@ -49,7 +62,7 @@ static void DrawPanel(Rectangle r, Color border) {
 
 static void UISectionHeader(const char* label, float x, float y, float width) {
     (void)width;
-    DrawText(label, (int)x, (int)y, 18, UI_LABEL);
+    UIText(label, (int)x, (int)y, 18, UI_LABEL);
 }
 
 static void AddBody(std::vector<Body>& bodies, Vector2 pos, Vector2 vel, float mass) {
@@ -269,8 +282,8 @@ static bool UIButton(Rectangle r, const char* label) {
     if (hover && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) bg = UI_BTN_PRESS;
     DrawRectangleRec(r, bg);
     DrawRectangleLinesEx(r, 1, hover ? UI_BORDER_LIT : UI_BORDER);
-    int tw = MeasureText(label, 18);
-    DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
+    float tw = UITextWidth(label, 18);
+    UIText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
              hover ? UI_VALUE : UI_TEXT);
     return hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
 }
@@ -282,15 +295,15 @@ static bool UIToggle(Rectangle r, const char* label, bool state) {
         // filled: white block with dark text, like a primary button
         Color bg = hover ? (Color){215, 215, 218, 255} : (Color){235, 235, 238, 255};
         DrawRectangleRec(r, bg);
-        int tw = MeasureText(label, 18);
-        DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
+        float tw = UITextWidth(label, 18);
+        UIText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
                  (Color){18, 18, 20, 255});
     } else {
         Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
         DrawRectangleRec(r, bg);
         DrawRectangleLinesEx(r, 1, hover ? UI_BORDER_LIT : UI_BORDER);
-        int tw = MeasureText(label, 18);
-        DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
+        float tw = UITextWidth(label, 18);
+        UIText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
                  UI_LABEL);
     }
     return hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
@@ -326,6 +339,12 @@ int main() {
     InitWindow(1280, 800, "Gravity Sandbox");
     SetWindowMinSize(800, 600);
     SetExitKey(KEY_NULL);   // Esc cancels pattern placement instead of quitting
+
+    g_uiFont = LoadFontEx(TextFormat("%sassets/Inter.ttf", GetApplicationDirectory()), 64, NULL, 0);
+    if (g_uiFont.texture.id != GetFontDefault().texture.id && g_uiFont.glyphCount > 0) {
+        g_uiFontLoaded = true;
+        SetTextureFilter(g_uiFont.texture, TEXTURE_FILTER_BILINEAR);
+    }
 
     std::vector<Body> bodies;
 
@@ -494,8 +513,8 @@ int main() {
         float y = panel.y + 12;
 
         const char* massTxt = TextFormat("%.0f", currentMass);
-        UISectionHeader("MASS", px, y, pw - MeasureText(massTxt, 18) - 10);
-        DrawText(massTxt, (int)(panel.x + panel.width - 14 - MeasureText(massTxt, 18)), (int)y, 18, UI_VALUE);
+        UISectionHeader("MASS", px, y, pw - UITextWidth(massTxt, 18) - 10);
+        UIText(massTxt, (int)(panel.x + panel.width - 14 - UITextWidth(massTxt, 18)), (int)y, 18, UI_VALUE);
         y += 26;
         currentMass = UISliderLog({px, y, pw, 24}, currentMass, MASS_MIN, MASS_MAX, &draggingSlider);
         y += 38;
@@ -537,8 +556,8 @@ int main() {
         y += 40;
 
         const char* trailTxt = TextFormat("%.1fs", trailLength / 60.0f);
-        UISectionHeader("TRAIL LENGTH", px, y, pw - MeasureText(trailTxt, 18) - 10);
-        DrawText(trailTxt, (int)(panel.x + panel.width - 14 - MeasureText(trailTxt, 18)), (int)y, 18, UI_VALUE);
+        UISectionHeader("TRAIL LENGTH", px, y, pw - UITextWidth(trailTxt, 18) - 10);
+        UIText(trailTxt, (int)(panel.x + panel.width - 14 - UITextWidth(trailTxt, 18)), (int)y, 18, UI_VALUE);
         y += 26;
         trailLength = UISliderLog({px, y, pw, 24}, trailLength, TRAIL_LEN_MIN, TRAIL_LEN_MAX,
                                    &draggingTrailSlider);
@@ -557,40 +576,40 @@ int main() {
         // ---- info card (top-left) ----
         Rectangle info = {10, 10, 170, 70};
         DrawPanel(info, UI_BORDER);
-        DrawText("FPS", (int)info.x + 14, (int)info.y + 13, 18, UI_LABEL);
+        UIText("FPS", (int)info.x + 14, (int)info.y + 13, 18, UI_LABEL);
         const char* fpsTxt = TextFormat("%d", GetFPS());
-        DrawText(fpsTxt, (int)(info.x + info.width - 14 - MeasureText(fpsTxt, 18)),
+        UIText(fpsTxt, (int)(info.x + info.width - 14 - UITextWidth(fpsTxt, 18)),
                  (int)info.y + 13, 18, UI_VALUE);
-        DrawText("Bodies", (int)info.x + 14, (int)info.y + 39, 18, UI_LABEL);
+        UIText("Bodies", (int)info.x + 14, (int)info.y + 39, 18, UI_LABEL);
         const char* bodyTxt = TextFormat("%d", (int)bodies.size());
-        DrawText(bodyTxt, (int)(info.x + info.width - 14 - MeasureText(bodyTxt, 18)),
+        UIText(bodyTxt, (int)(info.x + info.width - 14 - UITextWidth(bodyTxt, 18)),
                  (int)info.y + 39, 18, UI_VALUE);
 
         // ---- placement banner (top-center) ----
         if (pendingPattern != PAT_NONE) {
             const char* placeTxt = "Click to place pattern  -  ESC to cancel";
-            int ptw = MeasureText(placeTxt, 20);
+            float ptw = UITextWidth(placeTxt, 20);
             Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, paused ? 58.0f : 10.0f,
                                 ptw + 36.0f, 40};
             DrawPanel(banner, UI_BORDER_LIT);
-            DrawText(placeTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, UI_VALUE);
+            UIText(placeTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, UI_VALUE);
         }
 
         // ---- paused banner (top-center) ----
         if (paused) {
             const char* pauseTxt = "PAUSED  -  SPACE to resume";
-            int ptw = MeasureText(pauseTxt, 20);
+            float ptw = UITextWidth(pauseTxt, 20);
             Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, 10, ptw + 36.0f, 40};
             DrawPanel(banner, UI_BORDER_LIT);
-            DrawText(pauseTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, GOLD);
+            UIText(pauseTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, GOLD);
         }
 
         // ---- hint bar (bottom-left) ----
         const char* hints = "Left click: place / drag     Right / middle drag: pan     Wheel: zoom     Space: pause";
-        int htw = MeasureText(hints, 16);
+        float htw = UITextWidth(hints, 16);
         Rectangle hintBar = {10, screenHeight - 44.0f, htw + 28.0f, 34};
         DrawPanel(hintBar, UI_BORDER);
-        DrawText(hints, (int)(hintBar.x + 14), (int)(hintBar.y + 9), 16, UI_LABEL);
+        UIText(hints, (int)(hintBar.x + 14), (int)(hintBar.y + 9), 16, UI_LABEL);
 
         EndDrawing();
     }
