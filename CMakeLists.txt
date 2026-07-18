@@ -9,7 +9,11 @@ set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(vendor/raylib)
 
-add_executable(gravity_sandbox src/main.cpp)
+add_executable(gravity_sandbox
+    src/main.cpp
+    src/physics.cpp
+    src/patterns.cpp
+    src/ui.cpp)
 target_link_libraries(gravity_sandbox PRIVATE raylib)
 
 if(APPLE)

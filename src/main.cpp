@@ -1,368 +1,18 @@
 #include "raylib.h"
 #include "raymath.h"
-#include <vector>
-#include <deque>
-#include <cmath>
+
+#include "body.h"
+#include "patterns.h"
+#include "physics.h"
+#include "ui.h"
+
 #include <algorithm>
+#include <vector>
 
-struct Body {
-    Vector2 pos;
-    Vector2 vel;
-    float mass;
-    Color color;
-    std::deque<Vector2> trail;
-    bool alive = true;
-};
-
-static const float G = 1500.0f;
-static const float SOFTENING2 = 400.0f;   // softening^2, avoids singularities at close range
 static const float TRAIL_LEN_MIN = 10.0f;
 static const float TRAIL_LEN_MAX = 2000.0f;
 static const float MASS_MIN = 1.0f;
 static const float MASS_MAX = 20000.0f;
-
-static float MassToRadius(float mass) {
-    return 3.0f + cbrtf(mass) * 1.6f;
-}
-
-static Color ColorForMass(float mass) {
-    float hue = 220.0f - std::min(220.0f, log2f(mass + 1.0f) * 18.0f);
-    return ColorFromHSV(hue, 0.75f, 1.0f);
-}
-
-// ---------- UI theme (minimal dark, neutral grays) ----------
-
-static const Color UI_BG = {13, 13, 15, 248};
-static const Color UI_BORDER = {45, 45, 49, 255};
-static const Color UI_BORDER_LIT = {80, 80, 86, 255};
-static const Color UI_VALUE = {255, 255, 255, 255};
-static const Color UI_TEXT = {228, 228, 232, 255};
-static const Color UI_LABEL = {138, 138, 145, 255};
-static const Color UI_BTN_BG = {25, 25, 28, 255};
-static const Color UI_BTN_HOVER = {40, 40, 45, 255};
-static const Color UI_BTN_PRESS = {55, 55, 61, 255};
-
-static Font g_uiFont;
-static bool g_uiFontLoaded = false;
-
-static void UIText(const char* text, float x, float y, float size, Color c) {
-    if (g_uiFontLoaded) DrawTextEx(g_uiFont, text, {x, y}, size, 0, c);
-    else DrawText(text, (int)x, (int)y, (int)size, c);
-}
-
-static float UITextWidth(const char* text, float size) {
-    if (g_uiFontLoaded) return MeasureTextEx(g_uiFont, text, size, 0).x;
-    return (float)MeasureText(text, (int)size);
-}
-
-static void DrawPanel(Rectangle r, Color border) {
-    DrawRectangleRec(r, UI_BG);
-    DrawRectangleLinesEx(r, 1, border);
-}
-
-static void UISectionHeader(const char* label, float x, float y, float width) {
-    (void)width;
-    UIText(label, (int)x, (int)y, 18, UI_LABEL);
-}
-
-static void AddBody(std::vector<Body>& bodies, Vector2 pos, Vector2 vel, float mass) {
-    Body b;
-    b.pos = pos;
-    b.vel = vel;
-    b.mass = mass;
-    b.color = ColorForMass(mass);
-    bodies.push_back(b);
-}
-
-// ---------- patterns ----------
-
-static Vector2 OrbitVelocity(Vector2 center, Vector2 pos, float centralMass) {
-    Vector2 d = Vector2Subtract(pos, center);
-    float r = Vector2Length(d);
-    if (r < 1.0f) return {0, 0};
-    float v = sqrtf(G * centralMass / r);
-    Vector2 tangent = {-d.y / r, d.x / r};
-    return Vector2Scale(tangent, v);
-}
-
-static void SpawnSolarSystem(std::vector<Body>& bodies, Vector2 c) {
-    float starMass = 8000.0f;
-    AddBody(bodies, c, {0, 0}, starMass);
-    int planets = 6;
-    for (int i = 0; i < planets; i++) {
-        float r = 160.0f + i * 90.0f + GetRandomValue(-15, 15);
-        float ang = GetRandomValue(0, 359) * DEG2RAD;
-        Vector2 pos = {c.x + cosf(ang) * r, c.y + sinf(ang) * r};
-        AddBody(bodies, pos, OrbitVelocity(c, pos, starMass), (float)GetRandomValue(5, 40));
-    }
-}
-
-static void SpawnBinaryStars(std::vector<Body>& bodies, Vector2 c) {
-    float m = 4000.0f;
-    float d = 300.0f;
-    float v = sqrtf(G * m / (2.0f * d));
-    AddBody(bodies, {c.x - d / 2, c.y}, {0, -v}, m);
-    AddBody(bodies, {c.x + d / 2, c.y}, {0, v}, m);
-}
-
-static void SpawnPlanetRing(std::vector<Body>& bodies, Vector2 c) {
-    float starMass = 6000.0f;
-    AddBody(bodies, c, {0, 0}, starMass);
-    int count = 40;
-    float r = 300.0f;
-    for (int i = 0; i < count; i++) {
-        float ang = (2.0f * PI * i) / count;
-        Vector2 pos = {c.x + cosf(ang) * r, c.y + sinf(ang) * r};
-        AddBody(bodies, pos, OrbitVelocity(c, pos, starMass), 3.0f);
-    }
-}
-
-static void SpawnGalaxy(std::vector<Body>& bodies, Vector2 c) {
-    float coreMass = 12000.0f;
-    AddBody(bodies, c, {0, 0}, coreMass);
-    int count = 150;
-    for (int i = 0; i < count; i++) {
-        float r = 100.0f + powf((float)GetRandomValue(0, 1000) / 1000.0f, 1.5f) * 450.0f;
-        float ang = GetRandomValue(0, 359) * DEG2RAD;
-        Vector2 pos = {c.x + cosf(ang) * r, c.y + sinf(ang) * r};
-        Vector2 vel = OrbitVelocity(c, pos, coreMass);
-        vel = Vector2Scale(vel, 0.95f + GetRandomValue(0, 100) / 1000.0f);
-        AddBody(bodies, pos, vel, (float)GetRandomValue(1, 4));
-    }
-}
-
-static void SpawnGrid(std::vector<Body>& bodies, Vector2 c) {
-    int side = 6;
-    float spacing = 120.0f;
-    float half = (side - 1) * spacing / 2.0f;
-    for (int y = 0; y < side; y++) {
-        for (int x = 0; x < side; x++) {
-            AddBody(bodies, {c.x - half + x * spacing, c.y - half + y * spacing}, {0, 0}, 30.0f);
-        }
-    }
-}
-
-static void SpawnCloud(std::vector<Body>& bodies, Vector2 c) {
-    int count = 60;
-    for (int i = 0; i < count; i++) {
-        float r = sqrtf((float)GetRandomValue(0, 1000) / 1000.0f) * 400.0f;
-        float ang = GetRandomValue(0, 359) * DEG2RAD;
-        AddBody(bodies, {c.x + cosf(ang) * r, c.y + sinf(ang) * r}, {0, 0},
-                (float)GetRandomValue(5, 50));
-    }
-}
-
-static void SpawnFigure8(std::vector<Body>& bodies, Vector2 c) {
-    // Chenciner-Montgomery three-body figure-eight choreography, scaled from
-    // normalized units (G=1, m=1, L=1) to our G and pixel scale
-    float L = 300.0f, m = 500.0f;
-    float vs = sqrtf(G * m / L);
-    Vector2 p1 = {0.97000436f * L, -0.24308753f * L};
-    Vector2 v3 = {-0.93240737f * vs, -0.86473146f * vs};
-    Vector2 v12 = {-v3.x / 2, -v3.y / 2};
-    AddBody(bodies, {c.x + p1.x, c.y + p1.y}, v12, m);
-    AddBody(bodies, {c.x - p1.x, c.y - p1.y}, v12, m);
-    AddBody(bodies, c, v3, m);
-}
-
-static void SpawnMoons(std::vector<Body>& bodies, Vector2 c) {
-    float starMass = 8000.0f;
-    AddBody(bodies, c, {0, 0}, starMass);
-    // two planets, each with an orbiting moon inside its Hill sphere
-    float planetR[2] = {320.0f, 560.0f};
-    for (int i = 0; i < 2; i++) {
-        float ang = GetRandomValue(0, 359) * DEG2RAD;
-        float planetMass = 250.0f;
-        Vector2 pPos = {c.x + cosf(ang) * planetR[i], c.y + sinf(ang) * planetR[i]};
-        Vector2 pVel = OrbitVelocity(c, pPos, starMass);
-        AddBody(bodies, pPos, pVel, planetMass);
-
-        float moonR = 45.0f;
-        float mAng = GetRandomValue(0, 359) * DEG2RAD;
-        Vector2 mPos = {pPos.x + cosf(mAng) * moonR, pPos.y + sinf(mAng) * moonR};
-        Vector2 mVel = Vector2Add(pVel, OrbitVelocity(pPos, mPos, planetMass));
-        AddBody(bodies, mPos, mVel, 4.0f);
-    }
-}
-
-static void SpawnCollision(std::vector<Body>& bodies, Vector2 c) {
-    // two small galaxies drifting into each other
-    for (int g = 0; g < 2; g++) {
-        float side = (g == 0) ? -1.0f : 1.0f;
-        Vector2 core = {c.x + side * 480.0f, c.y + side * 120.0f};
-        Vector2 drift = {-side * 35.0f, -side * 8.0f};
-        float coreMass = 6000.0f;
-        AddBody(bodies, core, drift, coreMass);
-        for (int i = 0; i < 60; i++) {
-            float r = 60.0f + powf((float)GetRandomValue(0, 1000) / 1000.0f, 1.5f) * 220.0f;
-            float ang = GetRandomValue(0, 359) * DEG2RAD;
-            Vector2 pos = {core.x + cosf(ang) * r, core.y + sinf(ang) * r};
-            Vector2 vel = Vector2Add(drift, OrbitVelocity(core, pos, coreMass));
-            AddBody(bodies, pos, vel, (float)GetRandomValue(1, 3));
-        }
-    }
-}
-
-static void SpawnComets(std::vector<Body>& bodies, Vector2 c) {
-    float starMass = 8000.0f;
-    AddBody(bodies, c, {0, 0}, starMass);
-    // launched near perihelion faster than circular -> long elliptical orbits
-    for (int i = 0; i < 8; i++) {
-        float r = 100.0f + GetRandomValue(0, 60);
-        float ang = GetRandomValue(0, 359) * DEG2RAD;
-        Vector2 pos = {c.x + cosf(ang) * r, c.y + sinf(ang) * r};
-        Vector2 vel = Vector2Scale(OrbitVelocity(c, pos, starMass),
-                                    1.20f + GetRandomValue(0, 15) / 100.0f);
-        AddBody(bodies, pos, vel, 2.0f);
-    }
-}
-
-enum PatternType {
-    PAT_NONE = -1,
-    PAT_SOLAR,
-    PAT_BINARY,
-    PAT_RING,
-    PAT_GALAXY,
-    PAT_GRID,
-    PAT_CLOUD,
-    PAT_FIGURE8,
-    PAT_MOONS,
-    PAT_COLLIDE,
-    PAT_COMETS
-};
-
-static std::vector<Body> MakePattern(int type, Vector2 c) {
-    std::vector<Body> v;
-    switch (type) {
-        case PAT_SOLAR: SpawnSolarSystem(v, c); break;
-        case PAT_BINARY: SpawnBinaryStars(v, c); break;
-        case PAT_RING: SpawnPlanetRing(v, c); break;
-        case PAT_GALAXY: SpawnGalaxy(v, c); break;
-        case PAT_GRID: SpawnGrid(v, c); break;
-        case PAT_CLOUD: SpawnCloud(v, c); break;
-        case PAT_FIGURE8: SpawnFigure8(v, c); break;
-        case PAT_MOONS: SpawnMoons(v, c); break;
-        case PAT_COLLIDE: SpawnCollision(v, c); break;
-        case PAT_COMETS: SpawnComets(v, c); break;
-    }
-    return v;
-}
-
-// ---------- physics ----------
-
-enum CollisionMode {
-    COLLIDE_NONE = 0,    // bodies pass through each other
-    COLLIDE_MERGE,       // perfectly inelastic merge
-    COLLIDE_DEBRIS       // merge, but part of the smaller body sprays out as fragments
-};
-
-static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisionMode,
-                        bool recordTrail, int trailLength) {
-    size_t n = bodies.size();
-    std::vector<Vector2> accel(n, {0, 0});
-
-    for (size_t i = 0; i < n; i++) {
-        if (!bodies[i].alive) continue;
-        for (size_t j = i + 1; j < n; j++) {
-            if (!bodies[j].alive) continue;
-            Vector2 d = Vector2Subtract(bodies[j].pos, bodies[i].pos);
-            float dist2 = d.x * d.x + d.y * d.y + SOFTENING2;
-            float invDist = 1.0f / sqrtf(dist2);
-            float invDist3 = invDist * invDist * invDist;
-
-            Vector2 forceDir = Vector2Scale(d, invDist3);
-            accel[i] = Vector2Add(accel[i], Vector2Scale(forceDir, G * bodies[j].mass));
-            accel[j] = Vector2Subtract(accel[j], Vector2Scale(forceDir, G * bodies[i].mass));
-        }
-    }
-
-    std::vector<Vector2> oldPos(n);
-    for (size_t i = 0; i < n; i++) {
-        if (!bodies[i].alive) continue;
-        oldPos[i] = bodies[i].pos;
-        bodies[i].vel = Vector2Add(bodies[i].vel, Vector2Scale(accel[i], dt));
-        bodies[i].pos = Vector2Add(bodies[i].pos, Vector2Scale(bodies[i].vel, dt));
-
-        if (trailsOn) {
-            if (recordTrail) bodies[i].trail.push_back(bodies[i].pos);
-            while ((int)bodies[i].trail.size() > trailLength) bodies[i].trail.pop_front();
-        } else if (!bodies[i].trail.empty()) {
-            bodies[i].trail.clear();
-        }
-    }
-
-    // resolve overlapping bodies
-    if (collisionMode == COLLIDE_NONE) return;
-
-    // closest approach of the pair's *relative* motion over this step, so fast
-    // bodies can't tunnel through each other between sampled positions
-    auto pairMinDist = [&](size_t i, size_t j) {
-        Vector2 a = Vector2Subtract(oldPos[i], oldPos[j]);
-        Vector2 b = Vector2Subtract(bodies[i].pos, bodies[j].pos);
-        Vector2 ab = Vector2Subtract(b, a);
-        float len2 = ab.x * ab.x + ab.y * ab.y;
-        float t = (len2 > 0) ? Clamp(-(a.x * ab.x + a.y * ab.y) / len2, 0.0f, 1.0f) : 0.0f;
-        return Vector2Length(Vector2Add(a, Vector2Scale(ab, t)));
-    };
-
-    std::vector<Body> debris;
-    for (size_t i = 0; i < n; i++) {
-        if (!bodies[i].alive) continue;
-        for (size_t j = i + 1; j < n; j++) {
-            if (!bodies[j].alive) continue;
-            float dist = pairMinDist(i, j);
-            float minDist = MassToRadius(bodies[i].mass) + MassToRadius(bodies[j].mass);
-            if (dist < minDist) {
-                float m1 = bodies[i].mass, m2 = bodies[j].mass;
-                float totalMass = m1 + m2;
-                Body& big = (m1 >= m2) ? bodies[i] : bodies[j];
-                Body& small = (m1 >= m2) ? bodies[j] : bodies[i];
-                float impactSpeed = Vector2Length(Vector2Subtract(big.vel, small.vel));
-
-                // perfectly inelastic merge, conserves momentum
-                big.vel = Vector2Scale(Vector2Add(Vector2Scale(big.vel, big.mass),
-                                                   Vector2Scale(small.vel, small.mass)),
-                                        1.0f / totalMass);
-                big.pos = Vector2Scale(Vector2Add(Vector2Scale(big.pos, big.mass),
-                                                   Vector2Scale(small.pos, small.mass)),
-                                        1.0f / totalMass);
-                big.mass = totalMass;
-                small.alive = false;
-
-                // spray part of the smaller body back out as fragments
-                float debrisMass = 0.25f * std::min(m1, m2);
-                if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f) {
-                    int count = (int)Clamp(debrisMass / 3.0f, 3.0f, 8.0f);
-                    float fragMass = debrisMass / count;
-                    big.mass = totalMass - debrisMass;
-                    float kick = fmaxf(impactSpeed * 0.5f, 40.0f);
-                    float spawnR = MassToRadius(big.mass) + MassToRadius(fragMass) + 6.0f;
-                    float baseAng = GetRandomValue(0, 359) * DEG2RAD;
-                    // even angular spread keeps the net fragment momentum near zero
-                    for (int k = 0; k < count; k++) {
-                        float a = baseAng + 2.0f * PI * k / count;
-                        Vector2 dir = {cosf(a), sinf(a)};
-                        Body d;
-                        d.pos = Vector2Add(big.pos, Vector2Scale(dir, spawnR));
-                        d.vel = Vector2Add(big.vel,
-                                            Vector2Scale(dir, kick * (0.8f + GetRandomValue(0, 40) / 100.0f)));
-                        d.mass = fragMass;
-                        d.color = ColorForMass(fragMass);
-                        debris.push_back(d);
-                    }
-                }
-                big.color = ColorForMass(big.mass);
-            }
-        }
-    }
-
-    bodies.erase(std::remove_if(bodies.begin(), bodies.end(),
-                                 [](const Body& b) { return !b.alive; }),
-                 bodies.end());
-    bodies.insert(bodies.end(), debris.begin(), debris.end());
-}
-
-// ---------- grid ----------
 
 static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHeight) {
     Vector2 topLeft = GetScreenToWorld2D({0, 0}, camera);
@@ -393,81 +43,12 @@ static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHei
     DrawLineEx({topLeft.x, 0}, {bottomRight.x, 0}, 1.5f / camera.zoom, Fade(WHITE, 0.18f));
 }
 
-// ---------- immediate-mode UI ----------
-
-static bool UIButton(Rectangle r, const char* label) {
-    Vector2 m = GetMousePosition();
-    bool hover = CheckCollisionPointRec(m, r);
-    Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
-    if (hover && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) bg = UI_BTN_PRESS;
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 1, hover ? UI_BORDER_LIT : UI_BORDER);
-    float tw = UITextWidth(label, 18);
-    UIText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
-             hover ? UI_VALUE : UI_TEXT);
-    return hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
-}
-
-static bool UIToggle(Rectangle r, const char* label, bool state) {
-    Vector2 m = GetMousePosition();
-    bool hover = CheckCollisionPointRec(m, r);
-    if (state) {
-        // filled: white block with dark text, like a primary button
-        Color bg = hover ? (Color){215, 215, 218, 255} : (Color){235, 235, 238, 255};
-        DrawRectangleRec(r, bg);
-        float tw = UITextWidth(label, 18);
-        UIText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
-                 (Color){18, 18, 20, 255});
-    } else {
-        Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
-        DrawRectangleRec(r, bg);
-        DrawRectangleLinesEx(r, 1, hover ? UI_BORDER_LIT : UI_BORDER);
-        float tw = UITextWidth(label, 18);
-        UIText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
-                 UI_LABEL);
-    }
-    return hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
-}
-
-static float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* dragging) {
-    Vector2 m = GetMousePosition();
-    bool hover = CheckCollisionPointRec(m, r);
-    if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) *dragging = true;
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) *dragging = false;
-
-    float logMin = logf(minV), logMax = logf(maxV);
-    float t = (logf(value) - logMin) / (logMax - logMin);
-    if (*dragging) {
-        t = Clamp((m.x - r.x) / r.width, 0.0f, 1.0f);
-        value = expf(logMin + t * (logMax - logMin));
-    }
-
-    float cy = r.y + r.height / 2;
-    float kx = r.x + r.width * t;
-    DrawRectangleRec({r.x, cy - 2, r.width, 4}, (Color){55, 55, 60, 255});
-    DrawRectangleRec({r.x, cy - 2, kx - r.x, 4}, (Color){235, 235, 238, 255});
-    // square knob
-    float kh = (hover || *dragging) ? 20.0f : 18.0f;
-    Rectangle knob = {kx - kh / 2, cy - kh / 2, kh, kh};
-    DrawRectangleRec(knob, WHITE);
-    DrawRectangleLinesEx(knob, 1, (Color){120, 120, 126, 255});
-    return value;
-}
-
 int main() {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
     InitWindow(1280, 800, "Gravity Sandbox");
     SetWindowMinSize(800, 600);
     SetExitKey(KEY_NULL);   // Esc cancels pattern placement instead of quitting
-
-    // atlas sized ~2x the largest UI text size so glyphs sample near 1:1 on retina
-    int fontAtlasSize = (int)(20 * GetWindowScaleDPI().x) + 8;
-    g_uiFont = LoadFontEx(TextFormat("%sassets/Inter.ttf", GetApplicationDirectory()),
-                          fontAtlasSize, NULL, 0);
-    if (g_uiFont.texture.id != GetFontDefault().texture.id && g_uiFont.glyphCount > 0) {
-        g_uiFontLoaded = true;
-        SetTextureFilter(g_uiFont.texture, TEXTURE_FILTER_BILINEAR);
-    }
+    UILoadFont();
 
     std::vector<Body> bodies;
 
@@ -644,7 +225,7 @@ int main() {
 
         const char* massTxt = TextFormat("%.0f", currentMass);
         UISectionHeader("MASS", px, y, pw - UITextWidth(massTxt, 18) - 10);
-        UIText(massTxt, (int)(panel.x + panel.width - 14 - UITextWidth(massTxt, 18)), (int)y, 18, UI_VALUE);
+        UIText(massTxt, panel.x + panel.width - 14 - UITextWidth(massTxt, 18), y, 18, UI_VALUE);
         y += 26;
         currentMass = UISliderLog({px, y, pw, 24}, currentMass, MASS_MIN, MASS_MAX, &draggingSlider);
         y += 38;
@@ -700,7 +281,7 @@ int main() {
 
         const char* trailTxt = TextFormat("%.1fs", trailLength / 60.0f);
         UISectionHeader("TRAIL LENGTH", px, y, pw - UITextWidth(trailTxt, 18) - 10);
-        UIText(trailTxt, (int)(panel.x + panel.width - 14 - UITextWidth(trailTxt, 18)), (int)y, 18, UI_VALUE);
+        UIText(trailTxt, panel.x + panel.width - 14 - UITextWidth(trailTxt, 18), y, 18, UI_VALUE);
         y += 26;
         trailLength = UISliderLog({px, y, pw, 24}, trailLength, TRAIL_LEN_MIN, TRAIL_LEN_MAX,
                                    &draggingTrailSlider);
@@ -719,14 +300,12 @@ int main() {
         // ---- info card (top-left) ----
         Rectangle info = {10, 10, 170, 70};
         DrawPanel(info, UI_BORDER);
-        UIText("FPS", (int)info.x + 14, (int)info.y + 13, 18, UI_LABEL);
+        UIText("FPS", info.x + 14, info.y + 13, 18, UI_LABEL);
         const char* fpsTxt = TextFormat("%d", GetFPS());
-        UIText(fpsTxt, (int)(info.x + info.width - 14 - UITextWidth(fpsTxt, 18)),
-                 (int)info.y + 13, 18, UI_VALUE);
-        UIText("Bodies", (int)info.x + 14, (int)info.y + 39, 18, UI_LABEL);
+        UIText(fpsTxt, info.x + info.width - 14 - UITextWidth(fpsTxt, 18), info.y + 13, 18, UI_VALUE);
+        UIText("Bodies", info.x + 14, info.y + 39, 18, UI_LABEL);
         const char* bodyTxt = TextFormat("%d", (int)bodies.size());
-        UIText(bodyTxt, (int)(info.x + info.width - 14 - UITextWidth(bodyTxt, 18)),
-                 (int)info.y + 39, 18, UI_VALUE);
+        UIText(bodyTxt, info.x + info.width - 14 - UITextWidth(bodyTxt, 18), info.y + 39, 18, UI_VALUE);
 
         // ---- placement banner (top-center) ----
         if (pendingPattern != PAT_NONE) {
@@ -735,7 +314,7 @@ int main() {
             Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, paused ? 58.0f : 10.0f,
                                 ptw + 36.0f, 40};
             DrawPanel(banner, UI_BORDER_LIT);
-            UIText(placeTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, UI_VALUE);
+            UIText(placeTxt, banner.x + 18, banner.y + 10, 20, UI_VALUE);
         }
 
         // ---- paused banner (top-center) ----
@@ -744,7 +323,7 @@ int main() {
             float ptw = UITextWidth(pauseTxt, 20);
             Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, 10, ptw + 36.0f, 40};
             DrawPanel(banner, UI_BORDER_LIT);
-            UIText(pauseTxt, (int)(banner.x + 18), (int)(banner.y + 10), 20, GOLD);
+            UIText(pauseTxt, banner.x + 18, banner.y + 10, 20, GOLD);
         }
 
         // ---- hint bar (bottom-left) ----
@@ -752,7 +331,7 @@ int main() {
         float htw = UITextWidth(hints, 16);
         Rectangle hintBar = {10, screenHeight - 44.0f, htw + 28.0f, 34};
         DrawPanel(hintBar, UI_BORDER);
-        UIText(hints, (int)(hintBar.x + 14), (int)(hintBar.y + 9), 16, UI_LABEL);
+        UIText(hints, hintBar.x + 14, hintBar.y + 9, 16, UI_LABEL);
 
         EndDrawing();
     }
