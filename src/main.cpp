@@ -328,7 +328,7 @@ static float UISliderLog(Rectangle r, float value, float minV, float maxV, bool*
     DrawRectangleRec({r.x, cy - 2, kx - r.x, 4}, (Color){235, 235, 238, 255});
     // square knob
     float kh = (hover || *dragging) ? 20.0f : 18.0f;
-    Rectangle knob = {kx - 7, cy - kh / 2, 14, kh};
+    Rectangle knob = {kx - kh / 2, cy - kh / 2, kh, kh};
     DrawRectangleRec(knob, WHITE);
     DrawRectangleLinesEx(knob, 1, (Color){120, 120, 126, 255});
     return value;
