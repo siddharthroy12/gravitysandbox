@@ -32,15 +32,15 @@ static Color ColorForMass(float mass) {
 
 // ---------- UI theme ----------
 
-static const Color UI_BG = {16, 6, 24, 235};             // deep purple-black
-static const Color UI_ACCENT = {255, 42, 109, 255};      // hot neon pink
-static const Color UI_ACCENT_DIM = {125, 20, 60, 255};
-static const Color UI_VALUE = {252, 238, 10, 255};       // electric yellow
-static const Color UI_TEXT = {242, 222, 238, 255};
-static const Color UI_LABEL = {165, 120, 155, 255};
-static const Color UI_BTN_BG = {32, 12, 36, 255};
-static const Color UI_BTN_HOVER = {72, 20, 62, 255};
-static const Color UI_BTN_PRESS = {110, 32, 88, 255};
+static const Color UI_BG = {8, 14, 22, 235};             // deep blue-black
+static const Color UI_ACCENT = {0, 210, 255, 255};       // neon cyan
+static const Color UI_ACCENT_DIM = {0, 95, 125, 255};
+static const Color UI_VALUE = {170, 245, 255, 255};      // bright ice cyan
+static const Color UI_TEXT = {205, 232, 240, 255};
+static const Color UI_LABEL = {110, 150, 168, 255};
+static const Color UI_BTN_BG = {14, 26, 38, 255};
+static const Color UI_BTN_HOVER = {0, 62, 84, 255};
+static const Color UI_BTN_PRESS = {0, 95, 118, 255};
 
 // translucent panel with neon border and corner brackets
 static void DrawSciFiPanel(Rectangle r, Color accent) {
@@ -290,7 +290,7 @@ static bool UIButton(Rectangle r, const char* label) {
 static bool UIToggle(Rectangle r, const char* label, bool state) {
     Vector2 m = GetMousePosition();
     bool hover = CheckCollisionPointRec(m, r);
-    Color bg = state ? (Color){78, 14, 52, 255} : UI_BTN_BG;
+    Color bg = state ? (Color){0, 52, 72, 255} : UI_BTN_BG;
     if (hover) bg = state ? UI_BTN_PRESS : UI_BTN_HOVER;
     DrawRectangleRec(r, bg);
     DrawRectangleLinesEx(r, 1, state ? UI_ACCENT : Fade(UI_ACCENT, 0.3f));
@@ -323,7 +323,7 @@ static float UISliderLog(Rectangle r, float value, float minV, float maxV, bool*
 
     float cy = r.y + r.height / 2;
     float kx = r.x + r.width * t;
-    DrawLineEx({r.x, cy}, {r.x + r.width, cy}, 2, (Color){52, 20, 48, 255});
+    DrawLineEx({r.x, cy}, {r.x + r.width, cy}, 2, (Color){20, 40, 55, 255});
     DrawLineEx({r.x, cy}, {kx, cy}, 2, UI_ACCENT);
     DrawLineEx({r.x, cy}, {kx, cy}, 6, Fade(UI_ACCENT, 0.18f));   // glow
     // knob: bright core with halo ring
