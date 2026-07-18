@@ -43,9 +43,8 @@ static const Color UI_BTN_HOVER = {40, 40, 45, 255};
 static const Color UI_BTN_PRESS = {55, 55, 61, 255};
 
 static void DrawPanel(Rectangle r, Color border) {
-    float round = fminf(24.0f / fminf(r.width, r.height), 1.0f);   // ~12px corner radius
-    DrawRectangleRounded(r, round, 8, UI_BG);
-    DrawRectangleRoundedLinesEx(r, round, 8, 1, border);
+    DrawRectangleRec(r, UI_BG);
+    DrawRectangleLinesEx(r, 1, border);
 }
 
 static void UISectionHeader(const char* label, float x, float y, float width) {
@@ -268,9 +267,8 @@ static bool UIButton(Rectangle r, const char* label) {
     bool hover = CheckCollisionPointRec(m, r);
     Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
     if (hover && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) bg = UI_BTN_PRESS;
-    float round = fminf(16.0f / fminf(r.width, r.height), 1.0f);
-    DrawRectangleRounded(r, round, 8, bg);
-    DrawRectangleRoundedLinesEx(r, round, 8, 1, hover ? UI_BORDER_LIT : UI_BORDER);
+    DrawRectangleRec(r, bg);
+    DrawRectangleLinesEx(r, 1, hover ? UI_BORDER_LIT : UI_BORDER);
     int tw = MeasureText(label, 18);
     DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
              hover ? UI_VALUE : UI_TEXT);
@@ -280,18 +278,17 @@ static bool UIButton(Rectangle r, const char* label) {
 static bool UIToggle(Rectangle r, const char* label, bool state) {
     Vector2 m = GetMousePosition();
     bool hover = CheckCollisionPointRec(m, r);
-    float round = fminf(16.0f / fminf(r.width, r.height), 1.0f);
     if (state) {
-        // filled: white pill with dark text, like a primary button
+        // filled: white block with dark text, like a primary button
         Color bg = hover ? (Color){215, 215, 218, 255} : (Color){235, 235, 238, 255};
-        DrawRectangleRounded(r, round, 8, bg);
+        DrawRectangleRec(r, bg);
         int tw = MeasureText(label, 18);
         DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
                  (Color){18, 18, 20, 255});
     } else {
         Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
-        DrawRectangleRounded(r, round, 8, bg);
-        DrawRectangleRoundedLinesEx(r, round, 8, 1, hover ? UI_BORDER_LIT : UI_BORDER);
+        DrawRectangleRec(r, bg);
+        DrawRectangleLinesEx(r, 1, hover ? UI_BORDER_LIT : UI_BORDER);
         int tw = MeasureText(label, 18);
         DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18,
                  UI_LABEL);
@@ -314,13 +311,13 @@ static float UISliderLog(Rectangle r, float value, float minV, float maxV, bool*
 
     float cy = r.y + r.height / 2;
     float kx = r.x + r.width * t;
-    DrawRectangleRounded({r.x, cy - 2, r.width, 4}, 1.0f, 4, (Color){55, 55, 60, 255});
-    DrawRectangleRounded({r.x, cy - 2, kx - r.x, 4}, 1.0f, 4, (Color){235, 235, 238, 255});
+    DrawRectangleRec({r.x, cy - 2, r.width, 4}, (Color){55, 55, 60, 255});
+    DrawRectangleRec({r.x, cy - 2, kx - r.x, 4}, (Color){235, 235, 238, 255});
     // square knob
     float kh = (hover || *dragging) ? 20.0f : 18.0f;
     Rectangle knob = {kx - 7, cy - kh / 2, 14, kh};
-    DrawRectangleRounded(knob, 0.35f, 4, WHITE);
-    DrawRectangleRoundedLinesEx(knob, 0.35f, 4, 1, (Color){120, 120, 126, 255});
+    DrawRectangleRec(knob, WHITE);
+    DrawRectangleLinesEx(knob, 1, (Color){120, 120, 126, 255});
     return value;
 }
 
