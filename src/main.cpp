@@ -250,7 +250,13 @@ static std::vector<Body> MakePattern(int type, Vector2 c) {
 
 // ---------- physics ----------
 
-static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, bool mergeOn,
+enum CollisionMode {
+    COLLIDE_NONE = 0,    // bodies pass through each other
+    COLLIDE_MERGE,       // perfectly inelastic merge
+    COLLIDE_DEBRIS       // merge, but part of the smaller body sprays out as fragments
+};
+
+static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisionMode,
                         bool recordTrail, int trailLength) {
     size_t n = bodies.size();
     std::vector<Vector2> accel(n, {0, 0});
@@ -283,8 +289,9 @@ static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, bool
         }
     }
 
-    // merge overlapping bodies (perfectly inelastic collision, conserves momentum)
-    if (!mergeOn) return;
+    // resolve overlapping bodies
+    if (collisionMode == COLLIDE_NONE) return;
+    std::vector<Body> debris;
     for (size_t i = 0; i < n; i++) {
         if (!bodies[i].alive) continue;
         for (size_t j = i + 1; j < n; j++) {
@@ -296,7 +303,9 @@ static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, bool
                 float totalMass = m1 + m2;
                 Body& big = (m1 >= m2) ? bodies[i] : bodies[j];
                 Body& small = (m1 >= m2) ? bodies[j] : bodies[i];
+                float impactSpeed = Vector2Length(Vector2Subtract(big.vel, small.vel));
 
+                // perfectly inelastic merge, conserves momentum
                 big.vel = Vector2Scale(Vector2Add(Vector2Scale(big.vel, big.mass),
                                                    Vector2Scale(small.vel, small.mass)),
                                         1.0f / totalMass);
@@ -304,8 +313,31 @@ static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, bool
                                                    Vector2Scale(small.pos, small.mass)),
                                         1.0f / totalMass);
                 big.mass = totalMass;
-                big.color = ColorForMass(totalMass);
                 small.alive = false;
+
+                // spray part of the smaller body back out as fragments
+                float debrisMass = 0.25f * std::min(m1, m2);
+                if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f) {
+                    int count = (int)Clamp(debrisMass / 3.0f, 3.0f, 8.0f);
+                    float fragMass = debrisMass / count;
+                    big.mass = totalMass - debrisMass;
+                    float kick = fmaxf(impactSpeed * 0.5f, 40.0f);
+                    float spawnR = MassToRadius(big.mass) + MassToRadius(fragMass) + 6.0f;
+                    float baseAng = GetRandomValue(0, 359) * DEG2RAD;
+                    // even angular spread keeps the net fragment momentum near zero
+                    for (int k = 0; k < count; k++) {
+                        float a = baseAng + 2.0f * PI * k / count;
+                        Vector2 dir = {cosf(a), sinf(a)};
+                        Body d;
+                        d.pos = Vector2Add(big.pos, Vector2Scale(dir, spawnR));
+                        d.vel = Vector2Add(big.vel,
+                                            Vector2Scale(dir, kick * (0.8f + GetRandomValue(0, 40) / 100.0f)));
+                        d.mass = fragMass;
+                        d.color = ColorForMass(fragMass);
+                        debris.push_back(d);
+                    }
+                }
+                big.color = ColorForMass(big.mass);
             }
         }
     }
@@ -313,6 +345,7 @@ static void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, bool
     bodies.erase(std::remove_if(bodies.begin(), bodies.end(),
                                  [](const Body& b) { return !b.alive; }),
                  bodies.end());
+    bodies.insert(bodies.end(), debris.begin(), debris.end());
 }
 
 // ---------- grid ----------
@@ -434,7 +467,7 @@ int main() {
     bool paused = false;
     bool trailsOn = true;
     bool gridOn = true;
-    bool mergeOn = true;
+    int collisionMode = COLLIDE_MERGE;
     float trailTimer = 0.0f;
     const float trailInterval = 1.0f / 60.0f;   // trail sample rate, independent of FPS
     float trailLength = 240.0f;                  // in samples; /60 = seconds
@@ -451,7 +484,7 @@ int main() {
         int screenWidth = GetScreenWidth();
         int screenHeight = GetScreenHeight();
         camera.offset = {screenWidth / 2.0f, screenHeight / 2.0f};
-        const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f, 692.0f};
+        const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f, 718.0f};
         Vector2 mouseScreen = GetMousePosition();
         Vector2 mouseWorld = GetScreenToWorld2D(mouseScreen, camera);
         bool mouseOverUI = CheckCollisionPointRec(mouseScreen, panel) || draggingSlider ||
@@ -523,7 +556,7 @@ int main() {
         if (IsKeyPressed(KEY_T)) trailsOn = !trailsOn;
         if (IsKeyPressed(KEY_G)) gridOn = !gridOn;
         if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
-        if (IsKeyPressed(KEY_M)) mergeOn = !mergeOn;
+        if (IsKeyPressed(KEY_M)) collisionMode = (collisionMode + 1) % 3;
 
         auto centerOnBodies = [&]() {
             if (bodies.empty()) return;
@@ -548,7 +581,7 @@ int main() {
 
             const int substeps = 2;
             for (int s = 0; s < substeps; s++) {
-                StepPhysics(bodies, dt / substeps, trailsOn, mergeOn,
+                StepPhysics(bodies, dt / substeps, trailsOn, collisionMode,
                             recordTrail && s == substeps - 1, (int)trailLength);
             }
         }
@@ -640,7 +673,15 @@ int main() {
         if (UIToggle({px, y, halfW, 32}, "Trails (T)", trailsOn)) trailsOn = !trailsOn;
         if (UIToggle({px + halfW + 8, y, halfW, 32}, "Grid (G)", gridOn)) gridOn = !gridOn;
         y += 40;
-        if (UIToggle({px, y, pw, 32}, "Merge on collision (M)", mergeOn)) mergeOn = !mergeOn;
+        UISectionHeader("COLLISION (M)", px, y, pw);
+        y += 26;
+        float w3 = (pw - 16) / 3;
+        if (UIToggle({px, y, w3, 32}, "None", collisionMode == COLLIDE_NONE))
+            collisionMode = COLLIDE_NONE;
+        if (UIToggle({px + w3 + 8, y, w3, 32}, "Merge", collisionMode == COLLIDE_MERGE))
+            collisionMode = COLLIDE_MERGE;
+        if (UIToggle({px + 2 * (w3 + 8), y, w3, 32}, "Debris", collisionMode == COLLIDE_DEBRIS))
+            collisionMode = COLLIDE_DEBRIS;
         y += 40;
 
         const char* trailTxt = TextFormat("%.1fs", trailLength / 60.0f);

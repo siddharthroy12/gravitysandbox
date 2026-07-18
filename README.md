@@ -6,7 +6,7 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 
 ## Features
 
-- **N-body physics** — softened Newtonian gravity, semi-implicit Euler integration with substepping, momentum-conserving inelastic merging (toggleable)
+- **N-body physics** — softened Newtonian gravity, semi-implicit Euler integration with substepping, three collision modes (pass-through, momentum-conserving merge, or merge with debris ejection)
 - **Placement** — click to drop a dot at the current mass (log-scale slider, 1–20,000); click an existing dot to drag it around
 - **Patterns** — 10 presets placed with a mouse-follow ghost preview: Solar System, Binary Stars, Planet + Ring, Spiral Galaxy, Grid Collapse, Random Cloud, Figure-8, Moons, Collision, Comets
 - **Camera** — infinite pan (right/middle drag), zoom to cursor (wheel), reset view, jump to barycenter of all bodies
@@ -23,7 +23,7 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 | `Up` / `Down` | Adjust placement mass |
 | `T` | Toggle trails |
 | `G` | Toggle grid |
-| `M` | Toggle merge on collision |
+| `M` | Cycle collision mode (none / merge / debris) |
 | `R` | Reset view |
 | `H` | Center camera on all bodies |
 | `F` | Toggle fullscreen |
