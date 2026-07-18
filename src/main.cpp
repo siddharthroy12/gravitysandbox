@@ -335,12 +335,15 @@ static float UISliderLog(Rectangle r, float value, float minV, float maxV, bool*
 }
 
 int main() {
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
     InitWindow(1280, 800, "Gravity Sandbox");
     SetWindowMinSize(800, 600);
     SetExitKey(KEY_NULL);   // Esc cancels pattern placement instead of quitting
 
-    g_uiFont = LoadFontEx(TextFormat("%sassets/Inter.ttf", GetApplicationDirectory()), 64, NULL, 0);
+    // atlas sized ~2x the largest UI text size so glyphs sample near 1:1 on retina
+    int fontAtlasSize = (int)(20 * GetWindowScaleDPI().x) + 8;
+    g_uiFont = LoadFontEx(TextFormat("%sassets/Inter.ttf", GetApplicationDirectory()),
+                          fontAtlasSize, NULL, 0);
     if (g_uiFont.texture.id != GetFontDefault().texture.id && g_uiFont.glyphCount > 0) {
         g_uiFontLoaded = true;
         SetTextureFilter(g_uiFont.texture, TEXTURE_FILTER_BILINEAR);
