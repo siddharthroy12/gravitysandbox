@@ -179,8 +179,61 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         }
     }
 
+    // A small body can be pulled apart before physical contact when it enters
+    // the tidal region of a much heavier body. Keep this small-scene only: the
+    // collision grid deliberately avoids all-pairs work for crowded scenes.
+    std::vector<Body> debris;
+    if (n < ACCEL_TREE_THRESHOLD) {
+        for (size_t i = 0; i < n; i++) {
+            for (size_t j = i + 1; j < n; j++) {
+                if (!bodies[i].alive || !bodies[j].alive) continue;
+                Body& heavy = (bodies[i].mass >= bodies[j].mass) ? bodies[i] : bodies[j];
+                Body& small = (bodies[i].mass >= bodies[j].mass) ? bodies[j] : bodies[i];
+                float massRatio = heavy.mass / small.mass;
+                if (heavy.mass < 800.0f || massRatio < 12.0f) continue;
+
+                Vector2 toSmall = Vector2Subtract(small.pos, heavy.pos);
+                float distance = Vector2Length(toSmall);
+                float contact = MassToRadius(heavy.mass) + MassToRadius(small.mass);
+                // A gameplay-tuned Roche-like limit: it grows with the cube
+                // root of mass ratio but remains close enough to feel like a
+                // deep pass rather than a distant gravitational pull.
+                float rocheLimit = MassToRadius(heavy.mass) *
+                                   (1.4f + 0.5f * cbrtf(massRatio));
+                if (distance <= contact || distance >= rocheLimit) continue;
+
+                Vector2 relVel = Vector2Subtract(small.vel, heavy.vel);
+                if (Vector2DotProduct(toSmall, relVel) >= 0.0f) continue; // only inbound passes
+
+                int count = (int)Clamp(3.0f + cbrtf(massRatio), 3.0f, 8.0f);
+                float fragmentMass = small.mass / count;
+                float tidalKick = fmaxf(35.0f, 0.18f * sqrtf(G * heavy.mass / distance));
+                float offset = MassToRadius(small.mass) * 0.7f + MassToRadius(fragmentMass);
+                float baseAngle = GetRandomValue(0, 359) * DEG2RAD;
+                for (int k = 0; k < count; k++) {
+                    float angle = baseAngle + 2.0f * PI * k / count;
+                    Vector2 dir = {cosf(angle), sinf(angle)};
+                    Body fragment;
+                    fragment.pos = Vector2Add(small.pos, Vector2Scale(dir, offset));
+                    fragment.vel = Vector2Add(small.vel, Vector2Scale(dir, tidalKick));
+                    fragment.mass = fragmentMass;
+                    fragment.color = ColorForMass(fragmentMass);
+                    fragment.id = g_nextBodyId++;
+                    debris.push_back(fragment);
+                }
+                small.alive = false;
+            }
+        }
+    }
+
     // resolve overlapping bodies
-    if (collisionMode == COLLIDE_NONE) return;
+    if (collisionMode == COLLIDE_NONE) {
+        bodies.erase(std::remove_if(bodies.begin(), bodies.end(),
+                                    [](const Body& b) { return !b.alive; }),
+                    bodies.end());
+        bodies.insert(bodies.end(), debris.begin(), debris.end());
+        return;
+    }
 
     // closest approach of the pair's *relative* motion over this step, so fast
     // bodies can't tunnel through each other between sampled positions
@@ -193,7 +246,6 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         return Vector2Length(Vector2Add(a, Vector2Scale(ab, t)));
     };
 
-    std::vector<Body> debris;
     auto tryCollide = [&](size_t i, size_t j) {
         if (!bodies[i].alive || !bodies[j].alive) return;
         float dist = pairMinDist(i, j);

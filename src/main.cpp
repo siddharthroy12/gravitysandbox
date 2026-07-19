@@ -88,6 +88,10 @@ static bool draggingSpeedSlider = false;
 static int followId = -1;                           // body id the camera is locked onto
 static double lastClickTime = 0;
 static int lastClickBodyId = -1;
+static std::vector<float> energyHistory;
+static float energySampleTimer = 0.0f;
+static constexpr float ENERGY_SAMPLE_INTERVAL = 0.125f;
+static constexpr size_t ENERGY_HISTORY_LENGTH = 160;
 
 struct AudioState {
     Sound merge[4] = {};
@@ -149,6 +153,53 @@ static void CloseSandboxAudio() {
     UnloadSound(audio.merge[0]);
     CloseAudioDevice();
     audio.ready = false;
+}
+
+static float TotalEnergy(const std::vector<Body>& scene) {
+    float kinetic = 0.0f;
+    float potential = 0.0f;
+    for (size_t i = 0; i < scene.size(); i++) {
+        kinetic += 0.5f * scene[i].mass * Vector2LengthSqr(scene[i].vel);
+        for (size_t j = i + 1; j < scene.size(); j++) {
+            Vector2 delta = Vector2Subtract(scene[j].pos, scene[i].pos);
+            potential -= G * scene[i].mass * scene[j].mass /
+                         sqrtf(Vector2LengthSqr(delta) + SOFTENING2);
+        }
+    }
+    return kinetic + potential;
+}
+
+static void SampleEnergy(float simDt) {
+    energySampleTimer += simDt;
+    if (energySampleTimer < ENERGY_SAMPLE_INTERVAL) return;
+    energySampleTimer = 0.0f;
+    energyHistory.push_back(TotalEnergy(bodies));
+    if (energyHistory.size() > ENERGY_HISTORY_LENGTH) energyHistory.erase(energyHistory.begin());
+}
+
+static void DrawEnergyGraph(Rectangle area) {
+    DrawRectangleRec(area, Fade(BLACK, 0.45f));
+    DrawRectangleLinesEx(area, 1.0f, UI_BORDER);
+    if (energyHistory.size() < 2) return;
+
+    float low = *std::min_element(energyHistory.begin(), energyHistory.end());
+    float high = *std::max_element(energyHistory.begin(), energyHistory.end());
+    float span = high - low;
+    // Avoid magnifying harmless integration drift into a dramatic spike.
+    float minimumSpan = fmaxf(1.0f, fabsf(energyHistory.back()) * 0.002f);
+    if (span < minimumSpan) {
+        float mid = (high + low) * 0.5f;
+        low = mid - minimumSpan * 0.5f;
+        high = mid + minimumSpan * 0.5f;
+        span = minimumSpan;
+    }
+    for (size_t i = 1; i < energyHistory.size(); i++) {
+        float x0 = area.x + area.width * (float)(i - 1) / (ENERGY_HISTORY_LENGTH - 1);
+        float x1 = area.x + area.width * (float)i / (ENERGY_HISTORY_LENGTH - 1);
+        float y0 = area.y + area.height * (1.0f - (energyHistory[i - 1] - low) / span);
+        float y1 = area.y + area.height * (1.0f - (energyHistory[i] - low) / span);
+        DrawLineEx({x0, y0}, {x1, y1}, 1.5f, (Color){100, 210, 255, 255});
+    }
 }
 
 static void UpdateDrawFrame() {
@@ -251,7 +302,11 @@ static void UpdateDrawFrame() {
     }
 
     if (IsKeyPressed(KEY_SPACE)) paused = !paused;
-    if (IsKeyPressed(KEY_C)) bodies.clear();
+    if (IsKeyPressed(KEY_C)) {
+        bodies.clear();
+        energyHistory.clear();
+        energySampleTimer = 0.0f;
+    }
     if (IsKeyPressed(KEY_T)) trailsOn = !trailsOn;
     if (IsKeyPressed(KEY_G)) gridOn = !gridOn;
     if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
@@ -295,6 +350,7 @@ static void UpdateDrawFrame() {
                         recordTrail && s == substeps - 1, (int)trailLength, &impacts);
         }
         PlayImpactAudio(impacts);
+        SampleEnergy(stepDt);
         for (const ImpactEvent& im : impacts) {
             float maxR = Clamp(im.radius * 2.0f + sqrtf(im.energy) * 0.02f, 30.0f, 240.0f);
             shockwaves.push_back({im.pos, 0.0f, maxR, im.radius});
@@ -559,10 +615,14 @@ static void UpdateDrawFrame() {
     y += 36;
     if (UIButton({px, y, pw, 32}, "Fullscreen (F)")) ToggleBorderlessWindowed();
     y += 44;
-    if (UIButton({px, y, pw, 32}, "Clear Canvas (C)")) bodies.clear();
+    if (UIButton({px, y, pw, 32}, "Clear Canvas (C)")) {
+        bodies.clear();
+        energyHistory.clear();
+        energySampleTimer = 0.0f;
+    }
 
     // ---- info card (top-left) ----
-    Rectangle info = {10, 10, 170, 70};
+    Rectangle info = {10, 10, 210, 128};
     DrawPanel(info, UI_BORDER);
     UIText("FPS", info.x + 14, info.y + 13, 18, UI_LABEL);
     const char* fpsTxt = TextFormat("%d", GetFPS());
@@ -570,6 +630,15 @@ static void UpdateDrawFrame() {
     UIText("Bodies", info.x + 14, info.y + 39, 18, UI_LABEL);
     const char* bodyTxt = TextFormat("%d", (int)bodies.size());
     UIText(bodyTxt, info.x + info.width - 14 - UITextWidth(bodyTxt, 18), info.y + 39, 18, UI_VALUE);
+    UIText("TOTAL ENERGY", info.x + 14, info.y + 65, 14, UI_LABEL);
+    if (!energyHistory.empty()) {
+        float first = energyHistory.front();
+        float change = (fabsf(first) > 1.0f) ? (energyHistory.back() - first) / fabsf(first) * 100.0f : 0.0f;
+        const char* deltaTxt = TextFormat("%+.2f%%", change);
+        UIText(deltaTxt, info.x + info.width - 14 - UITextWidth(deltaTxt, 14), info.y + 65, 14,
+               fabsf(change) < 0.2f ? (Color){100, 210, 255, 255} : UI_VALUE);
+    }
+    DrawEnergyGraph({info.x + 14, info.y + 84, info.width - 28, 30});
 
     // ---- placement banner (top-center) ----
     if (pendingPattern != PAT_NONE) {
