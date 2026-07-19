@@ -452,6 +452,13 @@ static void UpdateDrawFrame() {
     }
     EndMode2D();
 
+    // Screen-space UI is authored in logical (CSS) pixels. On the web the
+    // high-DPI backing buffer is larger, so give this pass the same scale as
+    // the world camera instead of drawing it at raw framebuffer coordinates.
+    Camera2D uiRender = {};
+    uiRender.zoom = fbScale;
+    BeginMode2D(uiRender);
+
     // flick speed readout, in screen space next to the arrow tip
     if (flicking) {
         Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
@@ -602,14 +609,13 @@ static void UpdateDrawFrame() {
     DrawPanel(hintBar, UI_BORDER);
     UIText(hints, hintBar.x + 14, hintBar.y + 9, 16, UI_LABEL);
 
+    EndMode2D();
     EndDrawing();
 }
 
 int main() {
     unsigned int flags = FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE;
-#ifndef __EMSCRIPTEN__
-    flags |= FLAG_WINDOW_HIGHDPI;   // the web canvas handles DPI itself
-#endif
+    flags |= FLAG_WINDOW_HIGHDPI;
     SetConfigFlags(flags);
     InitWindow(1280, 800, "Gravity Sandbox");
     SetWindowMinSize(800, 600);
