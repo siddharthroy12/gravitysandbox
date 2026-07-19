@@ -784,7 +784,8 @@ static void UpdateDrawFrame() {
     patternButton({px, y, colW, 32}, "Figure-8", PAT_FIGURE8, "Three equal bodies in a stable figure-8 orbit");
     patternButton({col2, y, colW, 32}, "Moons", PAT_MOONS, "A star with two planets, each with its own moon");
     y += 36;
-    patternButton({px, y, colW, 32}, "Collision", PAT_COLLIDE, "Two small galaxies drifting into each other");
+    patternButton({px, y, colW, 32}, "Collision", PAT_COLLIDE,
+                  "Two galaxies with black hole cores drifting into each other");
     patternButton({col2, y, colW, 32}, "Comets", PAT_COMETS, "Comets on long elliptical orbits around a star");
     y += 36;
     patternButton({px, y, pw, 32}, "Black Hole", PAT_BLACKHOLE,

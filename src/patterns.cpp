@@ -124,6 +124,9 @@ static void SpawnCollision(std::vector<Body>& bodies, Vector2 c) {
         Vector2 drift = {-side * 35.0f, -side * 8.0f};
         float coreMass = 6000.0f;
         AddBody(bodies, core, drift, coreMass);
+        Body& bh = bodies.back();
+        bh.isBlackHole = true;
+        bh.color = {168, 120, 255, 255};   // accretion violet, used by trails
         for (int i = 0; i < 800; i++) {
             float r = 60.0f + powf((float)GetRandomValue(0, 1000) / 1000.0f, 1.5f) * 220.0f;
             float ang = GetRandomValue(0, 359) * DEG2RAD;
