@@ -24,27 +24,27 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 
 ## Controls
 
-| Input | Action |
-|---|---|
-| Left click | Place a dot at rest / drag an existing dot / stamp a pattern |
-| Left drag on empty space | Flick-launch a dot: pull back like a slingshot, release to fire |
-| Double-click a dot | Follow it with the camera (`Esc`, `R`, or panning stops following) |
-| Right or middle drag | Pan the camera |
-| Mouse wheel | Zoom (centered on cursor) |
-| `Space` | Pause / resume |
-| `Up` / `Down` | Adjust placement mass |
-| `T` | Toggle trails |
-| `G` | Toggle grid |
-| `V` | Toggle velocity vectors |
-| `B` | Toggle gravity field overlay |
-| `W` | Toggle space-curvature grid (shader) |
-| `.` | Advance one frame while paused |
-| `M` | Cycle collision mode (none / merge / debris) |
-| `R` | Reset view |
-| `H` | Center camera on all bodies |
-| `F` | Toggle fullscreen |
-| `C` | Clear canvas |
-| `Esc` | Cancel pattern placement |
+| Input                    | Action                                                             |
+| ------------------------ | ------------------------------------------------------------------ |
+| Left click               | Place a dot at rest / drag an existing dot / stamp a pattern       |
+| Left drag on empty space | Flick-launch a dot: pull back like a slingshot, release to fire    |
+| Double-click a dot       | Follow it with the camera (`Esc`, `R`, or panning stops following) |
+| Right or middle drag     | Pan the camera                                                     |
+| Mouse wheel              | Zoom (centered on cursor)                                          |
+| `Space`                  | Pause / resume                                                     |
+| `Up` / `Down`            | Adjust placement mass                                              |
+| `T`                      | Toggle trails                                                      |
+| `G`                      | Toggle grid                                                        |
+| `V`                      | Toggle velocity vectors                                            |
+| `B`                      | Toggle gravity field overlay                                       |
+| `W`                      | Toggle space-curvature grid (shader)                               |
+| `.`                      | Advance one frame while paused                                     |
+| `M`                      | Cycle collision mode (none / merge / debris)                       |
+| `R`                      | Reset view                                                         |
+| `H`                      | Center camera on all bodies                                        |
+| `F`                      | Toggle fullscreen                                                  |
+| `C`                      | Clear canvas                                                       |
+| `Esc`                    | Cancel pattern placement                                           |
 
 Everything with a shortcut also has a button in the on-screen panel.
 
