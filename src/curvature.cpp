@@ -36,8 +36,9 @@ static const char* CURV_FS_BODY =
     "        vec2 d = uPos[i] - world;\n"
     "        float dist = length(d) + 1.0;\n"
     "        float pull = uMass[i]/(0.02*dist*dist + 6.0*dist + 300.0);\n"
-    "        float mag = min(pull*14.0, dist*0.85);\n"   // never fold past the well center
-    "        disp += (d/dist)*mag;\n"
+    "        float x = pull*14.0/dist;\n"
+    "        float mag = dist*x/(1.0 + x);\n"   // smooth saturation: approaches but never\n"
+    "        disp += (d/dist)*mag;\n"           // reaches the well center, so no flat plateau\n"
     "        depth += pull;\n"
     "    }\n"
     "\n"
