@@ -249,6 +249,12 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         Body& big = (m1 >= m2) ? bodies[i] : bodies[j];
         Body& small = (m1 >= m2) ? bodies[j] : bodies[i];
         float impactSpeed = Vector2Length(Vector2Subtract(big.vel, small.vel));
+        // side of the impact: from the bigger body toward the smaller one,
+        // captured before the merge moves big.pos to the barycenter
+        Vector2 toSmall = Vector2Subtract(small.pos, big.pos);
+        Vector2 impactDir = (Vector2LengthSqr(toSmall) > 1e-6f)
+                                ? Vector2Normalize(toSmall)
+                                : Vector2{1.0f, 0.0f};
 
         // perfectly inelastic merge, conserves momentum
         big.vel = Vector2Scale(Vector2Add(Vector2Scale(big.vel, big.mass),
@@ -265,20 +271,25 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         // swallows everything, so no debris escapes the merge
         float debrisMass = 0.25f * std::min(m1, m2);
         if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f && !big.isBlackHole) {
-            int count = (int)Clamp(debrisMass / 3.0f, 3.0f, 8.0f);
+            // small dust-sized fragments, capped so huge impacts stay bounded
+            int count = (int)Clamp(ceilf(debrisMass / 2.0f), 4.0f, 16.0f);
             float fragMass = debrisMass / count;
             big.mass = totalMass - debrisMass;
-            float kick = fmaxf(impactSpeed * 0.5f, 40.0f);
             float spawnR = MassToRadius(big.mass) + MassToRadius(fragMass) + 6.0f;
-            float baseAng = GetRandomValue(0, 359) * DEG2RAD;
-            // even angular spread keeps the net fragment momentum near zero
+            // escape velocity from spawnR, with a small margin, so the
+            // fragments actually get away instead of raining back down
+            float escV = sqrtf(2.0f * G * big.mass / spawnR);
+            // a one-sided fan around the impact direction: fragments leave
+            // from the side where the smaller body hit
+            float baseAng = atan2f(impactDir.y, impactDir.x);
+            const float coneHalf = 55.0f * DEG2RAD;
             for (int k = 0; k < count; k++) {
-                float a = baseAng + 2.0f * PI * k / count;
+                float a = baseAng + (GetRandomValue(-100, 100) / 100.0f) * coneHalf;
                 Vector2 dir = {cosf(a), sinf(a)};
                 Body d;
                 d.pos = Vector2Add(big.pos, Vector2Scale(dir, spawnR));
                 d.vel = Vector2Add(big.vel,
-                                    Vector2Scale(dir, kick * (0.8f + GetRandomValue(0, 40) / 100.0f)));
+                                    Vector2Scale(dir, escV * (1.05f + GetRandomValue(0, 30) / 100.0f)));
                 d.mass = fragMass;
                 d.color = ColorForMass(fragMass);
                 d.id = g_nextBodyId++;
