@@ -648,28 +648,18 @@ static void UpdateDrawFrame() {
         Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
         if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
             // trajectory preview: the candidate as a test particle in the frozen
-            // field of the current bodies, ~5s ahead; stops at first impact.
+            // field of the current bodies, ~5s ahead. The path runs through
+            // bodies it would collide with, so the full arc stays visible.
             // Dots are placed at fixed screen-space spacing so the curve reads
             // as dotted at any speed or zoom.
             Color previewColor = ColorForMass(currentMass);
-            float candidateR = MassToRadius(currentMass);
             Vector2 pos = flickAnchor;
             Vector2 vel = Vector2Scale(pull, flickScale);
             float sinceDot = previewDotSpacing;   // draw a dot on the first step
             for (int i = 0; i < previewSteps; i++) {
                 Vector2 acc = GravityFieldAt(bodies, pos);
                 vel = Vector2Add(vel, Vector2Scale(acc, previewDt));
-                Vector2 next = Vector2Add(pos, Vector2Scale(vel, previewDt));
-                bool hit = false;
-                for (const Body& b : bodies) {
-                    float minDist = candidateR + MassToRadius(b.mass);
-                    if (Vector2DistanceSqr(next, b.pos) < minDist * minDist) {
-                        hit = true;
-                        break;
-                    }
-                }
-                if (hit) break;
-                pos = next;
+                pos = Vector2Add(pos, Vector2Scale(vel, previewDt));
                 sinceDot += Vector2Length(vel) * previewDt * camera.zoom;
                 if (sinceDot >= previewDotSpacing) {
                     sinceDot = 0.0f;
