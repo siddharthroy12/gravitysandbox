@@ -80,6 +80,9 @@ static bool flicking = false;                       // dragging out a new dot's 
 static Vector2 flickAnchor = {0, 0};
 static const float flickScale = 2.0f;               // px of pull -> px/s of launch speed
 static const float flickDeadzone = 6.0f;            // screen px; below this it's a plain click
+static const float previewDt = 1.0f / 60.0f;        // trajectory preview integrator step
+static const int previewSteps = 300;                // 300 * 1/60 = 5s of lookahead
+static const float previewDotSpacing = 7.0f;        // screen px between preview dots
 static bool vectorsOn = false;                      // per-body velocity arrows
 static bool fieldOn = false;                        // gravity field visualization
 static std::vector<Shockwave> shockwaves;
@@ -484,6 +487,37 @@ static void UpdateDrawFrame() {
         DrawCircleLinesV(flickAnchor, r, Fade(WHITE, 0.5f));
         Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
         if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
+            // trajectory preview: the candidate as a test particle in the frozen
+            // field of the current bodies, ~5s ahead; stops at first impact.
+            // Dots are placed at fixed screen-space spacing so the curve reads
+            // as dotted at any speed or zoom.
+            Color previewColor = ColorForMass(currentMass);
+            float candidateR = MassToRadius(currentMass);
+            Vector2 pos = flickAnchor;
+            Vector2 vel = Vector2Scale(pull, flickScale);
+            float sinceDot = previewDotSpacing;   // draw a dot on the first step
+            for (int i = 0; i < previewSteps; i++) {
+                Vector2 acc = GravityFieldAt(bodies, pos);
+                vel = Vector2Add(vel, Vector2Scale(acc, previewDt));
+                Vector2 next = Vector2Add(pos, Vector2Scale(vel, previewDt));
+                bool hit = false;
+                for (const Body& b : bodies) {
+                    float minDist = candidateR + MassToRadius(b.mass);
+                    if (Vector2DistanceSqr(next, b.pos) < minDist * minDist) {
+                        hit = true;
+                        break;
+                    }
+                }
+                if (hit) break;
+                pos = next;
+                sinceDot += Vector2Length(vel) * previewDt * camera.zoom;
+                if (sinceDot >= previewDotSpacing) {
+                    sinceDot = 0.0f;
+                    float fadeT = 1.0f - (float)i / previewSteps;
+                    DrawCircleV(pos, 2.0f / camera.zoom,
+                                Fade(previewColor, 0.15f + 0.6f * fadeT));
+                }
+            }
             DrawLineEx(flickAnchor, mouseWorld, 1.5f / camera.zoom, Fade(WHITE, 0.25f));
             Vector2 tip = Vector2Add(flickAnchor, pull);
             float thick = 2.5f / camera.zoom;

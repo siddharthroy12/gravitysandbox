@@ -13,7 +13,7 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 ## Features
 
 - **N-body physics** — softened Newtonian gravity, semi-implicit Euler integration with substepping, three collision modes (pass-through, momentum-conserving merge, or merge with debris ejection)
-- **Placement** — click to drop a dot at the current mass (log-scale slider, 1–20,000), or drag and release to flick-launch it with an aimed velocity; click an existing dot to drag it around
+- **Placement** — click to drop a dot at the current mass (log-scale slider, 1–20,000), or drag and release to flick-launch it with an aimed velocity; while aiming, a dotted preview shows the candidate's trajectory ~5 seconds ahead through the current field, stopping at the first impact; click an existing dot to drag it around
 - **Patterns** — 10 presets placed with a mouse-follow ghost preview: Solar System, Binary Stars, Planet + Ring, Spiral Galaxy, Grid Collapse, Random Cloud, Figure-8, Moons, Collision, Comets
 - **Camera** — infinite pan (right/middle drag), zoom to cursor (wheel), reset view, jump to barycenter of all bodies, or double-click a body to follow it
 - **Time** — sim-speed slider (0.1x–10x) and single-frame stepping while paused
