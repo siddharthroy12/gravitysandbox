@@ -77,9 +77,11 @@ static bool draggingTrailSlider = false;
 static int pendingPattern = PAT_NONE;
 static std::vector<Body> previewBodies;             // pattern preview, positions relative to cursor
 static bool draggingBody = false;
+static bool dragEngaged = false;                    // mouse moved past the deadzone: really dragging
 static bool draggingSlider = false;
 static int dragIndex = -1;
 static Vector2 dragOffset = {0, 0};
+static Vector2 dragAnchor = {0, 0};                 // mouse world pos at press, for the deadzone
 static bool flicking = false;                       // dragging out a new dot's launch velocity
 static Vector2 flickAnchor = {0, 0};
 static const float flickScale = 2.0f;               // px of pull -> px/s of launch speed
@@ -277,8 +279,10 @@ static void UpdateDrawFrame() {
                     followCenter = false;
                 } else {
                     draggingBody = true;
+                    dragEngaged = false;
                     dragIndex = i;
                     dragOffset = Vector2Subtract(bodies[i].pos, mouseWorld);
+                    dragAnchor = mouseWorld;
                 }
                 lastClickTime = now;
                 lastClickBodyId = bodies[i].id;
@@ -297,8 +301,20 @@ static void UpdateDrawFrame() {
     }
     if (draggingBody && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && dragIndex >= 0 &&
         dragIndex < (int)bodies.size()) {
-        bodies[dragIndex].pos = Vector2Add(mouseWorld, dragOffset);
-        bodies[dragIndex].vel = {0, 0};
+        if (!dragEngaged) {
+            // deadzone: a plain click (including the first click of a
+            // double-click) must not disturb the body; only real mouse
+            // motion starts a drag
+            Vector2 dragDelta = Vector2Subtract(mouseWorld, dragAnchor);
+            if (Vector2Length(dragDelta) * camera.zoom >= flickDeadzone) {
+                dragEngaged = true;
+                dragOffset = Vector2Subtract(bodies[dragIndex].pos, mouseWorld);
+            }
+        }
+        if (dragEngaged) {
+            bodies[dragIndex].pos = Vector2Add(mouseWorld, dragOffset);
+            bodies[dragIndex].vel = {0, 0};
+        }
     }
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         if (flicking) {
@@ -311,6 +327,7 @@ static void UpdateDrawFrame() {
         }
         flicking = false;
         draggingBody = false;
+        dragEngaged = false;
         dragIndex = -1;
     }
 
