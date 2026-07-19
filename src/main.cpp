@@ -7,6 +7,7 @@
 #include "ui.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #ifdef __EMSCRIPTEN__
@@ -87,6 +88,68 @@ static bool draggingSpeedSlider = false;
 static int followId = -1;                           // body id the camera is locked onto
 static double lastClickTime = 0;
 static int lastClickBodyId = -1;
+
+struct AudioState {
+    Sound merge[4] = {};
+    int mergeVoice = 0;
+    bool ready = false;
+    float mergeCooldown = 0.0f;
+};
+
+static AudioState audio;
+
+// Build tiny one-shot sounds in memory. This works in native raylib and in the
+// web build, without asking the browser to fetch separate audio files.
+static Sound MakeTone(float seconds, float startHz, float endHz, float volume) {
+    constexpr int sampleRate = 22050;
+    const unsigned int frames = (unsigned int)(seconds * sampleRate);
+    auto* samples = (short*)MemAlloc(frames * sizeof(short));
+    for (unsigned int i = 0; i < frames; i++) {
+        float t = (float)i / frames;
+        float hz = startHz + (endHz - startHz) * t;
+        float env = (1.0f - t) * (1.0f - t);
+        float phase = 2.0f * PI * hz * ((float)i / sampleRate);
+        float wave = sinf(phase);
+        samples[i] = (short)(Clamp(wave * env * volume, -1.0f, 1.0f) * 32767.0f);
+    }
+    Wave wave = {frames, sampleRate, 16, 1, samples};
+    Sound sound = LoadSoundFromWave(wave);
+    UnloadWave(wave);
+    return sound;
+}
+
+static void InitSandboxAudio() {
+    InitAudioDevice();
+    if (!IsAudioDeviceReady()) return;
+    audio.merge[0] = MakeTone(0.13f, 190.0f, 105.0f, 0.34f);
+    for (int i = 1; i < 4; i++) audio.merge[i] = LoadSoundAlias(audio.merge[0]);
+    audio.ready = true;
+}
+
+static void PlayImpactAudio(const std::vector<ImpactEvent>& impacts) {
+    if (!audio.ready) return;
+    audio.mergeCooldown = fmaxf(0.0f, audio.mergeCooldown - GetFrameTime());
+
+    for (const ImpactEvent& impact : impacts) {
+        if (audio.mergeCooldown <= 0.0f) {
+            float pitch = Clamp(0.68f + log2f(impact.mass / 50.0f) * 0.13f, 0.65f, 1.6f);
+            Sound sound = audio.merge[audio.mergeVoice++ % 4];
+            SetSoundPitch(sound, pitch);
+            SetSoundVolume(sound, 1.0f);
+            PlaySound(sound);
+            audio.mergeCooldown = 0.045f;
+        }
+    }
+
+}
+
+static void CloseSandboxAudio() {
+    if (!audio.ready) return;
+    for (int i = 1; i < 4; i++) UnloadSoundAlias(audio.merge[i]);
+    UnloadSound(audio.merge[0]);
+    CloseAudioDevice();
+    audio.ready = false;
+}
 
 static void UpdateDrawFrame() {
     float dt = GetFrameTime();
@@ -231,6 +294,7 @@ static void UpdateDrawFrame() {
             StepPhysics(bodies, stepDt / substeps, trailsOn, collisionMode,
                         recordTrail && s == substeps - 1, (int)trailLength, &impacts);
         }
+        PlayImpactAudio(impacts);
         for (const ImpactEvent& im : impacts) {
             float maxR = Clamp(im.radius * 2.0f + sqrtf(im.energy) * 0.02f, 30.0f, 240.0f);
             shockwaves.push_back({im.pos, 0.0f, maxR, im.radius});
@@ -551,6 +615,7 @@ int main() {
     SetWindowMinSize(800, 600);
     SetExitKey(KEY_NULL);   // Esc cancels pattern placement instead of quitting
     UILoadFont();
+    InitSandboxAudio();
 
     camera.offset = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
     camera.target = {0, 0};
@@ -562,6 +627,7 @@ int main() {
     while (!WindowShouldClose()) UpdateDrawFrame();
 #endif
 
+    CloseSandboxAudio();
     CloseWindow();
     return 0;
 }

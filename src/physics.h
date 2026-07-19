@@ -12,6 +12,7 @@ struct ImpactEvent {
     Vector2 pos;
     float energy;    // 0.5 * reduced mass * impact speed^2
     float radius;    // radius of the merged body
+    float mass;      // mass after the merge/debris split
 };
 
 // Advance the simulation. Uses a Barnes-Hut quadtree for forces and a uniform

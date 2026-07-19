@@ -244,7 +244,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         if (impacts) {
             float mu = m1 * m2 / totalMass;   // reduced mass
             impacts->push_back({big.pos, 0.5f * mu * impactSpeed * impactSpeed,
-                                MassToRadius(big.mass)});
+                                MassToRadius(big.mass), big.mass});
         }
     };
 
