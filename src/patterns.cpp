@@ -158,6 +158,10 @@ static void SpawnBlackHole(std::vector<Body>& bodies, Vector2 c, float mass) {
     bh.color = {168, 120, 255, 255};   // accretion violet, used by trails
 }
 
+static void SpawnPlanet(std::vector<Body>& bodies, Vector2 c, float mass) {
+    AddBody(bodies, c, {0, 0}, mass);
+}
+
 std::vector<Body> MakePattern(int type, Vector2 c, float mass) {
     std::vector<Body> v;
     switch (type) {
@@ -172,6 +176,7 @@ std::vector<Body> MakePattern(int type, Vector2 c, float mass) {
         case PAT_COLLIDE: SpawnCollision(v, c); break;
         case PAT_COMETS: SpawnComets(v, c); break;
         case PAT_BLACKHOLE: SpawnBlackHole(v, c, mass); break;
+        case PAT_PLANET: SpawnPlanet(v, c, mass); break;
     }
     return v;
 }

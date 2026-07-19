@@ -150,8 +150,6 @@ static bool draggingSlider = false;
 static int dragIndex = -1;
 static Vector2 dragOffset = {0, 0};
 static Vector2 dragAnchor = {0, 0};                 // mouse world pos at press, for the deadzone
-static bool flicking = false;                       // dragging out a new dot's launch velocity
-static Vector2 flickAnchor = {0, 0};
 static const float flickScale = 2.0f;               // px of pull -> px/s of launch speed
 static const float flickDeadzone = 6.0f;            // screen px; below this it's a plain click
 static const float previewDt = 1.0f / 60.0f;        // trajectory preview integrator step
@@ -317,29 +315,25 @@ static void UpdateDrawFrame() {
     if (IsKeyDown(KEY_DOWN)) currentMass *= 0.97f;
     currentMass = Clamp(currentMass, MASS_MIN, MASS_MAX);
 
-    // the black hole pattern is sized by the mass selection: rebuild the
+    // the single-body patterns are sized by the mass selection: rebuild the
     // pending preview whenever the mass changes so the ghost stays honest
-    if (pendingPattern == PAT_BLACKHOLE && currentMass != patternMass) {
-        previewBodies = MakePattern(PAT_BLACKHOLE, {0, 0}, currentMass);
+    if ((pendingPattern == PAT_PLANET || pendingPattern == PAT_BLACKHOLE) &&
+        currentMass != patternMass) {
+        previewBodies = MakePattern(pendingPattern, {0, 0}, currentMass);
         patternMass = currentMass;
     }
 
-    // Esc cancels pending pattern placement, an in-progress flick, or follow mode
+    // Esc cancels an in-progress launch or follow mode; the armed pattern stays
     if (IsKeyPressed(KEY_ESCAPE)) {
-        pendingPattern = PAT_NONE;
-        previewBodies.clear();
         patternFlicking = false;
-        flicking = false;
         followId = -1;
         followCenter = false;
     }
 
-    // left press with a pattern pending: start a flick; the pattern lands on
-    // release, at rest for a plain click or launched along the pull direction
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !mouseOverUI && pendingPattern != PAT_NONE) {
-        patternFlicking = true;
-        patternAnchor = mouseWorld;
-    } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !mouseOverUI) {
+    // left press: grab an existing body on a hit (double-click follows); on
+    // empty space, start a pattern flick — the pattern lands on release, at
+    // rest for a plain click or launched along the pull direction
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !mouseOverUI) {
         draggingBody = false;
         dragIndex = -1;
         bool hitBody = false;
@@ -365,11 +359,8 @@ static void UpdateDrawFrame() {
         if (!hitBody) {
             lastClickTime = GetTime();
             lastClickBodyId = -1;
-        }
-        if (!hitBody) {
-            // empty space: start a flick; the dot spawns on release
-            flicking = true;
-            flickAnchor = mouseWorld;
+            patternFlicking = true;
+            patternAnchor = mouseWorld;
         }
     }
     if (draggingBody && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && dragIndex >= 0 &&
@@ -390,7 +381,7 @@ static void UpdateDrawFrame() {
         }
     }
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        if (patternFlicking && pendingPattern != PAT_NONE) {
+        if (patternFlicking) {
             // slingshot the whole pattern: every body gets the launch velocity
             Vector2 pull = Vector2Subtract(patternAnchor, mouseWorld);
             Vector2 launchVel = (Vector2Length(pull) * camera.zoom < flickDeadzone)
@@ -401,19 +392,9 @@ static void UpdateDrawFrame() {
                 b.vel = Vector2Add(b.vel, launchVel);
                 bodies.push_back(b);
             }
-            pendingPattern = PAT_NONE;
-            previewBodies.clear();
+            // the pattern stays armed for the next placement
         }
         patternFlicking = false;
-        if (flicking) {
-            // slingshot: launch opposite the pull direction
-            Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
-            Vector2 vel = (Vector2Length(pull) * camera.zoom < flickDeadzone)
-                              ? Vector2{0, 0}
-                              : Vector2Scale(pull, flickScale);
-            AddBody(bodies, flickAnchor, vel, currentMass);
-        }
-        flicking = false;
         draggingBody = false;
         dragEngaged = false;
         dragIndex = -1;
@@ -648,48 +629,9 @@ static void UpdateDrawFrame() {
             }
         }
     }
-    if (flicking) {
-        // ghost dot at the anchor, rubber band to the cursor, launch arrow opposite
-        float r = MassToRadius(currentMass);
-        DrawCircleV(flickAnchor, r, Fade(ColorForMass(currentMass), 0.5f));
-        DrawCircleLinesV(flickAnchor, r, Fade(WHITE, 0.5f));
-        Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
-        if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
-            // trajectory preview: the candidate as a test particle in the frozen
-            // field of the current bodies, ~5s ahead. The path runs through
-            // bodies it would collide with, so the full arc stays visible.
-            // Dots are placed at fixed screen-space spacing so the curve reads
-            // as dotted at any speed or zoom.
-            Color previewColor = ColorForMass(currentMass);
-            Vector2 pos = flickAnchor;
-            Vector2 vel = Vector2Scale(pull, flickScale);
-            float sinceDot = previewDotSpacing;   // draw a dot on the first step
-            for (int i = 0; i < previewSteps; i++) {
-                Vector2 acc = GravityFieldAt(bodies, pos);
-                vel = Vector2Add(vel, Vector2Scale(acc, previewDt));
-                pos = Vector2Add(pos, Vector2Scale(vel, previewDt));
-                sinceDot += Vector2Length(vel) * previewDt * camera.zoom;
-                if (sinceDot >= previewDotSpacing) {
-                    sinceDot = 0.0f;
-                    float fadeT = 1.0f - (float)i / previewSteps;
-                    DrawCircleV(pos, 2.0f / camera.zoom,
-                                Fade(previewColor, 0.15f + 0.6f * fadeT));
-                }
-            }
-            DrawLineEx(flickAnchor, mouseWorld, 1.5f / camera.zoom, Fade(WHITE, 0.25f));
-            Vector2 tip = Vector2Add(flickAnchor, pull);
-            float thick = 2.5f / camera.zoom;
-            DrawLineEx(flickAnchor, tip, thick, WHITE);
-            Vector2 dir = Vector2Normalize(pull);
-            float head = 12.0f / camera.zoom;
-            DrawLineEx(tip, Vector2Add(tip, Vector2Scale(Vector2Rotate(dir, 150 * DEG2RAD), head)),
-                       thick, WHITE);
-            DrawLineEx(tip, Vector2Add(tip, Vector2Scale(Vector2Rotate(dir, -150 * DEG2RAD), head)),
-                       thick, WHITE);
-        }
-    } else if (pendingPattern != PAT_NONE && !mouseOverUI) {
-        // ghost preview of the pattern: follows the cursor, pinned to the
-        // anchor while a launch is being dragged out
+    if (pendingPattern != PAT_NONE && !mouseOverUI) {
+        // ghost preview of the armed pattern: follows the cursor, pinned to
+        // the anchor while a launch is being dragged out
         Vector2 anchor = patternFlicking ? patternAnchor : mouseWorld;
         float ghostDust = fmaxf(2.4f, 2.0f / camera.zoom);
         for (const Body& b : previewBodies) {
@@ -706,6 +648,30 @@ static void UpdateDrawFrame() {
         if (patternFlicking) {
             Vector2 pull = Vector2Subtract(patternAnchor, mouseWorld);
             if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
+                // trajectory preview for the single-body patterns (planet,
+                // black hole): the candidate as a test particle in the frozen
+                // field of the current bodies, ~5s ahead. The path runs
+                // through bodies it would collide with, so the full arc stays
+                // visible. Dots are placed at fixed screen-space spacing so
+                // the curve reads as dotted at any speed or zoom.
+                if (previewBodies.size() == 1) {
+                    Color previewColor = previewBodies[0].color;
+                    Vector2 pos = patternAnchor;
+                    Vector2 vel = Vector2Scale(pull, flickScale);
+                    float sinceDot = previewDotSpacing;   // draw a dot on the first step
+                    for (int i = 0; i < previewSteps; i++) {
+                        Vector2 acc = GravityFieldAt(bodies, pos);
+                        vel = Vector2Add(vel, Vector2Scale(acc, previewDt));
+                        pos = Vector2Add(pos, Vector2Scale(vel, previewDt));
+                        sinceDot += Vector2Length(vel) * previewDt * camera.zoom;
+                        if (sinceDot >= previewDotSpacing) {
+                            sinceDot = 0.0f;
+                            float fadeT = 1.0f - (float)i / previewSteps;
+                            DrawCircleV(pos, 2.0f / camera.zoom,
+                                        Fade(previewColor, 0.15f + 0.6f * fadeT));
+                        }
+                    }
+                }
                 DrawLineEx(patternAnchor, mouseWorld, 1.5f / camera.zoom, Fade(WHITE, 0.25f));
                 Vector2 tip = Vector2Add(patternAnchor, pull);
                 float thick = 2.5f / camera.zoom;
@@ -718,8 +684,6 @@ static void UpdateDrawFrame() {
                            thick, WHITE);
             }
         }
-    } else if (!draggingBody && !mouseOverUI && pendingPattern == PAT_NONE) {
-        DrawCircleLinesV(mouseWorld, MassToRadius(currentMass), Fade(WHITE, 0.5f));
     }
     EndMode2D();
     EndTextureMode();
@@ -738,12 +702,11 @@ static void UpdateDrawFrame() {
     DrawTexturePro(sceneRT.texture, {0, 0, (float)sceneRTW, -(float)sceneRTH},
                    {0, 0, (float)screenWidth, (float)screenHeight}, {0, 0}, 0, WHITE);
 
-    // flick speed readout, in screen space next to the arrow tip
-    if (flicking || patternFlicking) {
-        Vector2 anchor = patternFlicking ? patternAnchor : flickAnchor;
-        Vector2 pull = Vector2Subtract(anchor, mouseWorld);
+    // launch speed readout, in screen space next to the arrow tip
+    if (patternFlicking) {
+        Vector2 pull = Vector2Subtract(patternAnchor, mouseWorld);
         if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
-            Vector2 tipScreen = GetWorldToScreen2D(Vector2Add(anchor, pull), camera);
+            Vector2 tipScreen = GetWorldToScreen2D(Vector2Add(patternAnchor, pull), camera);
             UIText(TextFormat("%.0f", Vector2Length(pull) * flickScale),
                    tipScreen.x + 10, tipScreen.y - 8, 16, UI_VALUE);
         }
@@ -767,15 +730,11 @@ static void UpdateDrawFrame() {
     y += 26;
 
     auto patternButton = [&](Rectangle r, const char* label, int type, const char* tip) {
-        if (UIToggle(r, label, pendingPattern == type, tip)) {
-            if (pendingPattern == type) {
-                pendingPattern = PAT_NONE;
-                previewBodies.clear();
-            } else {
-                pendingPattern = type;
-                previewBodies = MakePattern(type, {0, 0}, currentMass);
-                patternMass = currentMass;
-            }
+        // one pattern is always armed, so clicking the active one is a no-op
+        if (UIToggle(r, label, pendingPattern == type, tip) && pendingPattern != type) {
+            pendingPattern = type;
+            previewBodies = MakePattern(type, {0, 0}, currentMass);
+            patternMass = currentMass;
         }
     };
     float colW = (pw - 8) / 2;
@@ -797,7 +756,9 @@ static void UpdateDrawFrame() {
                   "Two galaxies with black hole cores drifting into each other");
     patternButton({col2, y, colW, 32}, "Comets", PAT_COMETS, "Comets on long elliptical orbits around a star");
     y += 36;
-    patternButton({px, y, pw, 32}, "Black Hole", PAT_BLACKHOLE,
+    patternButton({px, y, colW, 32}, "Planet", PAT_PLANET,
+                  "A single planet sized by the MASS slider");
+    patternButton({col2, y, colW, 32}, "Black Hole", PAT_BLACKHOLE,
                   "A black hole with a swirling accretion disk; sized by the MASS slider");
     y += 36;
 
@@ -903,16 +864,6 @@ static void UpdateDrawFrame() {
     }
     DrawEnergyGraph({info.x + 14, info.y + 84, info.width - 28, 30});
 
-    // ---- placement banner (top-center) ----
-    if (pendingPattern != PAT_NONE) {
-        const char* placeTxt = "Click to place pattern  -  drag to launch  -  ESC to cancel";
-        float ptw = UITextWidth(placeTxt, 20);
-        Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, paused ? 58.0f : 10.0f,
-                            ptw + 36.0f, 40};
-        DrawPanel(banner, UI_BORDER_LIT);
-        UIText(placeTxt, banner.x + 18, banner.y + 10, 20, UI_VALUE);
-    }
-
     // ---- paused banner (top-center) ----
     if (paused) {
         const char* pauseTxt = "PAUSED  -  SPACE to resume  -  [.] to step";
@@ -922,11 +873,10 @@ static void UpdateDrawFrame() {
         UIText(pauseTxt, banner.x + 18, banner.y + 10, 20, GOLD);
     }
 
-    // ---- following banner (top-center, stacks under the others) ----
+    // ---- following banner (top-center, stacks under the paused banner) ----
     if (followId != -1 || followCenter) {
         float fy = 10.0f;
         if (paused) fy += 48;
-        if (pendingPattern != PAT_NONE) fy += 48;
         const char* followTxt = followCenter ? "FOLLOWING CENTER  -  ESC to stop"
                                              : "FOLLOWING  -  ESC to stop";
         float ftw = UITextWidth(followTxt, 20);
@@ -970,6 +920,11 @@ int main() {
     camera.offset = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
     camera.target = {0, 0};
     camera.zoom = 1.0f;
+
+    // a pattern is always armed; start on the plain planet
+    pendingPattern = PAT_PLANET;
+    previewBodies = MakePattern(PAT_PLANET, {0, 0}, currentMass);
+    patternMass = currentMass;
 
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(UpdateDrawFrame, 0, 1);

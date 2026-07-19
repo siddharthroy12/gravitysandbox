@@ -14,10 +14,11 @@ enum PatternType {
     PAT_MOONS,
     PAT_COLLIDE,
     PAT_COMETS,
-    PAT_BLACKHOLE
+    PAT_BLACKHOLE,
+    PAT_PLANET
 };
 
 // Build a pattern's bodies centered on `c` (pass {0,0} for cursor-relative
-// previews). `mass` scales the patterns with a user-sized centerpiece
-// (currently just the black hole); the rest ignore it.
+// previews). `mass` scales the single-body patterns (planet, black hole);
+// the rest ignore it.
 std::vector<Body> MakePattern(int type, Vector2 c, float mass);
