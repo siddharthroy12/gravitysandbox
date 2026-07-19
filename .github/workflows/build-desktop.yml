@@ -1,0 +1,51 @@
+name: Desktop builds
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos
+            bin: build/gravity_sandbox
+          - os: ubuntu-latest
+            name: linux
+            bin: build/gravity_sandbox
+          - os: windows-latest
+            name: windows
+            bin: build/Release/gravity_sandbox.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+              libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir stage
+          cp "${{ matrix.bin }}" stage/
+          cp -r "$(dirname '${{ matrix.bin }}')/assets" stage/assets
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gravity-sandbox-${{ matrix.name }}
+          path: stage/

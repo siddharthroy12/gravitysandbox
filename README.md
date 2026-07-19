@@ -1,6 +1,7 @@
 # Gravity Sandbox
 
 [![Deploy web build](https://github.com/siddharthroy12/gravitysandbox/actions/workflows/deploy-web.yml/badge.svg)](https://github.com/siddharthroy12/gravitysandbox/actions/workflows/deploy-web.yml)
+[![Desktop builds](https://github.com/siddharthroy12/gravitysandbox/actions/workflows/build-desktop.yml/badge.svg)](https://github.com/siddharthroy12/gravitysandbox/actions/workflows/build-desktop.yml)
 
 An interactive Newtonian gravity simulator written in C++ with [raylib](https://github.com/raysan5/raylib).
 
@@ -51,6 +52,9 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 Everything with a shortcut also has a button in the on-screen panel.
 
 ## Building
+
+Prebuilt macOS / Linux / Windows binaries are attached as artifacts to every
+[desktop build run](https://github.com/siddharthroy12/gravitysandbox/actions/workflows/build-desktop.yml).
 
 ### Prerequisites
 
