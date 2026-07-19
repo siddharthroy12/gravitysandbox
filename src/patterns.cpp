@@ -149,7 +149,7 @@ static void SpawnBlackHole(std::vector<Body>& bodies, Vector2 c) {
     AddBody(bodies, c, {0, 0}, 40000.0f);
     Body& bh = bodies.back();
     bh.isBlackHole = true;
-    bh.color = {255, 170, 90, 255};   // accretion orange, used by trails
+    bh.color = {168, 120, 255, 255};   // accretion violet, used by trails
 }
 
 std::vector<Body> MakePattern(int type, Vector2 c) {

@@ -57,6 +57,71 @@ static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHei
     DrawLineEx({topLeft.x, 0}, {bottomRight.x, 0}, 1.5f / camera.zoom, Fade(WHITE, 0.18f));
 }
 
+// ---------- black hole rendering ----------
+
+static Color BHLerpColor(Color a, Color b, float t) {
+    return {(unsigned char)(a.r + (b.r - a.r) * t), (unsigned char)(a.g + (b.g - a.g) * t),
+            (unsigned char)(a.b + (b.b - a.b) * t), 255};
+}
+
+// One half of the flattened accretion disk (back = upper arcs, drawn behind the
+// horizon; front = lower arcs, drawn over it). Strands are static ellipses with
+// a traveling brightness wave, which reads as swirling gas without arc clipping.
+static void DrawBHDiskHalf(Vector2 c, float r, float time, bool back) {
+    const Color lavender = {215, 185, 255, 255};
+    const Color violet = {150, 100, 255, 255};
+    const Color deepPurple = {100, 55, 220, 255};
+    const int strands = 18;
+    float a0 = back ? 180.0f : 0.0f;
+
+    for (int i = 0; i < strands; i++) {
+        unsigned int h = (unsigned int)i * 1664525u + 1013904223u;
+        float rnd1 = ((h >> 8) & 1023) / 1023.0f;
+        float rnd2 = ((h >> 18) & 1023) / 1023.0f;
+        float t01 = (i + rnd1 * 0.7f) / strands;
+        float ax = r * (1.50f + 3.2f * t01 * t01);          // semi-major, out to ~4.7r
+        float ay = ax * (0.30f + 0.05f * rnd2);             // squashed: seen nearly edge-on
+        float speed = 140.0f / (0.4f + t01);                // inner gas swirls faster
+        float phase = time * speed + rnd1 * 360.0f;
+        int freq = 2 + (int)(rnd2 * 2.99f);
+        Color col = (t01 < 0.5f) ? BHLerpColor(lavender, violet, t01 * 2.0f)
+                                 : BHLerpColor(violet, deepPurple, t01 * 2.0f - 1.0f);
+        float baseAlpha = (0.30f - 0.22f * t01) * (0.7f + 0.3f * rnd2);
+        float thick = fmaxf(r * (0.055f - 0.030f * t01), 1.2f);
+
+        const float step = 10.0f;
+        Vector2 prev = {c.x + cosf(DEG2RAD * a0) * ax, c.y + sinf(DEG2RAD * a0) * ay};
+        for (float ang = a0 + step; ang <= a0 + 180.0f + 0.1f; ang += step) {
+            Vector2 pt = {c.x + cosf(DEG2RAD * ang) * ax, c.y + sinf(DEG2RAD * ang) * ay};
+            float wave = 0.5f + 0.5f * sinf(DEG2RAD * (ang * freq + phase));
+            DrawLineEx(prev, pt, thick, Fade(col, baseAlpha * (0.35f + 0.65f * wave)));
+            prev = pt;
+        }
+    }
+}
+
+static void DrawBlackHoleFX(Vector2 p, float r, float time) {
+    const Color violet = {150, 100, 255, 255};
+    const Color deepPurple = {100, 55, 220, 255};
+    const Color ringCore = {225, 205, 255, 255};
+
+    BeginBlendMode(BLEND_ADDITIVE);
+    DrawCircleV(p, r * 4.6f, Fade(deepPurple, 0.05f));      // ambient violet haze
+    DrawCircleV(p, r * 2.4f, Fade(violet, 0.07f));
+    DrawBHDiskHalf(p, r, time, true);                       // far side of the disk
+    EndBlendMode();
+
+    DrawCircleV(p, r * 1.02f, BLACK);                       // event horizon
+
+    BeginBlendMode(BLEND_ADDITIVE);
+    DrawRing(p, r * 1.42f, r * 1.47f, 0, 360, 72, Fade(violet, 0.12f));   // lensing shell
+    DrawRing(p, r * 1.04f, r * 1.18f, 0, 360, 72, Fade(violet, 0.50f));   // photon ring
+    DrawRing(p, r * 1.05f, r * 1.12f, 0, 360, 72, Fade(ringCore, 0.85f));
+    DrawRing(p, r * 1.18f, r * 1.34f, 0, 360, 72, Fade(violet, 0.16f));   // ring bloom
+    DrawBHDiskHalf(p, r, time, false);                      // near side crosses the horizon
+    EndBlendMode();
+}
+
 // ---------- app state (file scope so the web main-loop callback can reach it) ----------
 
 static std::vector<Body> bodies;
@@ -492,12 +557,16 @@ static void UpdateDrawFrame() {
                           (unsigned char)((b.color.b + 255) / 2), 255};
             DrawRectangleRec({b.pos.x - dustSize / 2, b.pos.y - dustSize / 2, dustSize, dustSize},
                              core);
-        } else if (b.isBlackHole) {
-            // event horizon: an opaque black disk that eats whatever is behind it
-            DrawCircleV(b.pos, MassToRadius(b.mass), BLACK);
-        } else {
+        } else if (!b.isBlackHole) {
             DrawCircleV(b.pos, MassToRadius(b.mass), b.color);
         }
+        // black holes render in their own layered pass below
+    }
+
+    // black holes: far disk behind the horizon, photon ring + near disk over it
+    float bhTime = (float)GetTime();
+    for (const Body& b : bodies) {
+        if (b.isBlackHole) DrawBlackHoleFX(b.pos, MassToRadius(b.mass), bhTime);
     }
 
     // additive pass: dust glow, hot halos on heavy bodies, then impact shockwaves
@@ -515,27 +584,6 @@ static void UpdateDrawFrame() {
         DrawCircleV(b.pos, halo, Fade(b.color, 0.10f));
         DrawCircleV(b.pos, halo * 0.55f, Fade(b.color, 0.16f));
         DrawCircleV(b.pos, halo * 0.30f, Fade(b.color, 0.25f));
-    }
-    // black holes: soft outer glow, warm accretion disk with rotating hot
-    // spots, and a thin bright photon ring hugging the event horizon
-    float bhSpin = (float)(GetTime() * 110.0);   // hot-spot angular speed, deg/s
-    for (const Body& b : bodies) {
-        if (!b.isBlackHole) continue;
-        float r = MassToRadius(b.mass);
-        DrawCircleV(b.pos, r * 3.4f, Fade((Color){255, 140, 50, 255}, 0.05f));
-        // accretion disk: overlapping bands, hottest near the horizon
-        for (int k = 0; k < 7; k++) {
-            float rr = r * (1.30f + 0.26f * k);
-            float half = r * 0.15f;
-            Color dc = {255, (unsigned char)(225 - k * 18), (unsigned char)(150 - k * 18), 255};
-            DrawRing(b.pos, rr - half, rr + half, 0, 360, 64, Fade(dc, 0.20f - k * 0.024f));
-        }
-        DrawRing(b.pos, r * 1.35f, r * 1.85f, bhSpin, bhSpin + 130, 64,
-                 Fade((Color){255, 214, 130, 255}, 0.38f));
-        DrawRing(b.pos, r * 1.35f, r * 1.85f, bhSpin + 210, bhSpin + 265, 64,
-                 Fade((Color){255, 190, 95, 255}, 0.24f));
-        DrawRing(b.pos, r * 1.03f, r * 1.10f, 0, 360, 64,
-                 Fade((Color){255, 246, 222, 255}, 0.85f));
     }
     for (const Shockwave& sw : shockwaves) {
         float t = sw.age / SHOCKWAVE_LIFE;

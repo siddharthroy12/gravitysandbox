@@ -284,7 +284,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                 debris.push_back(d);
             }
         }
-        if (big.isBlackHole) big.color = {255, 170, 90, 255};
+        if (big.isBlackHole) big.color = {168, 120, 255, 255};
         else big.color = ColorForMass(big.mass);
 
         if (impacts) {
