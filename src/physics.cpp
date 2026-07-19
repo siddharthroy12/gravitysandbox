@@ -249,8 +249,8 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         Body& big = (m1 >= m2) ? bodies[i] : bodies[j];
         Body& small = (m1 >= m2) ? bodies[j] : bodies[i];
         float impactSpeed = Vector2Length(Vector2Subtract(big.vel, small.vel));
-        // side of the impact: from the bigger body toward the smaller one,
-        // captured before the merge moves big.pos to the barycenter
+        // impact axis: from the bigger body toward the smaller one, captured
+        // before the merge moves big.pos to the barycenter
         Vector2 toSmall = Vector2Subtract(small.pos, big.pos);
         Vector2 impactDir = (Vector2LengthSqr(toSmall) > 1e-6f)
                                 ? Vector2Normalize(toSmall)
@@ -279,12 +279,14 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
             // escape velocity from spawnR, with a small margin, so the
             // fragments actually get away instead of raining back down
             float escV = sqrtf(2.0f * G * big.mass / spawnR);
-            // a one-sided fan around the impact direction: fragments leave
-            // from the side where the smaller body hit
-            float baseAng = atan2f(impactDir.y, impactDir.x);
-            const float coneHalf = 55.0f * DEG2RAD;
+            // two fans perpendicular to the impact axis, one on each side of
+            // the contact point; alternating sides keeps net momentum ~0
+            Vector2 perp = {-impactDir.y, impactDir.x};
+            float baseAng = atan2f(perp.y, perp.x);
+            const float coneHalf = 45.0f * DEG2RAD;
             for (int k = 0; k < count; k++) {
-                float a = baseAng + (GetRandomValue(-100, 100) / 100.0f) * coneHalf;
+                float side = (k % 2 == 0) ? 0.0f : PI;
+                float a = baseAng + side + (GetRandomValue(-100, 100) / 100.0f) * coneHalf;
                 Vector2 dir = {cosf(a), sinf(a)};
                 Body d;
                 d.pos = Vector2Add(big.pos, Vector2Scale(dir, spawnR));
