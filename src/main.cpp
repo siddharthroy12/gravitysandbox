@@ -9,6 +9,14 @@
 #include <algorithm>
 #include <vector>
 
+struct Shockwave {
+    Vector2 pos;
+    float age;      // sim seconds since impact
+    float maxR;
+    float baseR;
+};
+static const float SHOCKWAVE_LIFE = 0.6f;
+
 static const float TRAIL_LEN_MIN = 10.0f;
 static const float TRAIL_LEN_MAX = 2000.0f;
 static const float MASS_MIN = 1.0f;
@@ -78,6 +86,8 @@ int main() {
     const float flickScale = 2.0f;               // px of pull -> px/s of launch speed
     const float flickDeadzone = 6.0f;            // screen px; below this it's a plain click
     bool vectorsOn = false;                      // per-body velocity arrows
+    bool fieldOn = false;                        // gravity field visualization
+    std::vector<Shockwave> shockwaves;
     float simSpeed = 1.0f;                       // time multiplier, 0.1x - 10x
     bool draggingSpeedSlider = false;
     int followId = -1;                           // body id the camera is locked onto
@@ -190,6 +200,7 @@ int main() {
         if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
         if (IsKeyPressed(KEY_M)) collisionMode = (collisionMode + 1) % 3;
         if (IsKeyPressed(KEY_V)) vectorsOn = !vectorsOn;
+        if (IsKeyPressed(KEY_B)) fieldOn = !fieldOn;
 
         auto centerOnBodies = [&]() {
             if (bodies.empty()) return;
@@ -220,11 +231,20 @@ int main() {
             bool recordTrail = trailTimer >= trailInterval;
             if (recordTrail) trailTimer = 0.0f;
 
+            std::vector<ImpactEvent> impacts;
             const int substeps = 2;
             for (int s = 0; s < substeps; s++) {
                 StepPhysics(bodies, stepDt / substeps, trailsOn, collisionMode,
-                            recordTrail && s == substeps - 1, (int)trailLength);
+                            recordTrail && s == substeps - 1, (int)trailLength, &impacts);
             }
+            for (const ImpactEvent& im : impacts) {
+                float maxR = Clamp(im.radius * 2.0f + sqrtf(im.energy) * 0.02f, 30.0f, 240.0f);
+                shockwaves.push_back({im.pos, 0.0f, maxR, im.radius});
+            }
+            for (Shockwave& sw : shockwaves) sw.age += stepDt;
+            shockwaves.erase(std::remove_if(shockwaves.begin(), shockwaves.end(),
+                                             [](const Shockwave& s) { return s.age >= SHOCKWAVE_LIFE; }),
+                             shockwaves.end());
         }
 
         // follow mode: keep the camera locked on the followed body
@@ -252,17 +272,68 @@ int main() {
         camRender.zoom = camera.zoom * dpi.x;
         BeginMode2D(camRender);
         if (gridOn) DrawSpaceGrid(camera, screenWidth, screenHeight);
+
+        if (fieldOn) {
+            // gravity vector field sampled on a screen-space grid; arrow length
+            // and brightness follow log-magnitude, so Lagrange regions show as gaps
+            const float fieldSpacing = 48.0f;
+            for (float sy = fieldSpacing / 2; sy < screenHeight; sy += fieldSpacing) {
+                for (float sx = fieldSpacing / 2; sx < screenWidth; sx += fieldSpacing) {
+                    Vector2 wp = GetScreenToWorld2D({sx, sy}, camera);
+                    Vector2 gvec = GravityFieldAt(bodies, wp);
+                    float mag = Vector2Length(gvec);
+                    if (mag < 1.0f) continue;
+                    float t = Clamp(log10f(mag) / 4.0f, 0.0f, 1.0f);
+                    float len = (6.0f + 14.0f * t) / camera.zoom;
+                    Vector2 dir = Vector2Scale(gvec, 1.0f / mag);
+                    Vector2 tip = Vector2Add(wp, Vector2Scale(dir, len));
+                    Color fc = Fade((Color){140, 180, 255, 255}, 0.12f + 0.5f * t);
+                    float thick = 1.2f / camera.zoom;
+                    DrawLineEx(wp, tip, thick, fc);
+                    float head = 4.0f / camera.zoom;
+                    DrawLineEx(tip, Vector2Add(tip, Vector2Scale(Vector2Rotate(dir, 150 * DEG2RAD), head)), thick, fc);
+                    DrawLineEx(tip, Vector2Add(tip, Vector2Scale(Vector2Rotate(dir, -150 * DEG2RAD), head)), thick, fc);
+                }
+            }
+        }
+
+        // stride trail points when crowded so draw cost stays bounded
+        int trailStride = 1 + (int)(bodies.size() / 300);
         for (auto& b : bodies) {
-            if (trailsOn && b.trail.size() > 1) {
+            if (trailsOn && (int)b.trail.size() > trailStride) {
                 float trailWidth = std::max(2.0f, MassToRadius(b.mass) * 0.35f);
-                for (size_t k = 1; k < b.trail.size(); k++) {
+                for (size_t k = trailStride; k < b.trail.size(); k += trailStride) {
                     float a = (float)k / b.trail.size();
                     Color c = Fade(b.color, a * 0.6f);
-                    DrawLineEx(b.trail[k - 1], b.trail[k], trailWidth * a, c);
+                    DrawLineEx(b.trail[k - trailStride], b.trail[k], trailWidth * a, c);
                 }
             }
             DrawCircleV(b.pos, MassToRadius(b.mass), b.color);
         }
+
+        // additive pass: hot halos on heavy bodies, then impact shockwaves
+        BeginBlendMode(BLEND_ADDITIVE);
+        for (const Body& b : bodies) {
+            if (b.mass < 800.0f) continue;
+            float r = MassToRadius(b.mass);
+            float halo = r * (1.8f + std::min(b.mass / 10000.0f, 1.2f));
+            DrawCircleV(b.pos, halo, Fade(b.color, 0.10f));
+            DrawCircleV(b.pos, halo * 0.55f, Fade(b.color, 0.16f));
+            DrawCircleV(b.pos, halo * 0.30f, Fade(b.color, 0.25f));
+        }
+        for (const Shockwave& sw : shockwaves) {
+            float t = sw.age / SHOCKWAVE_LIFE;
+            float ease = 1.0f - (1.0f - t) * (1.0f - t);
+            float ringR = sw.baseR + (sw.maxR - sw.baseR) * ease;
+            Color warm = {255, 220, 150, 255};
+            DrawRing(sw.pos, ringR - 3.0f / camera.zoom, ringR, 0, 360, 48,
+                     Fade(warm, (1.0f - t) * 0.55f));
+            if (t < 0.25f) {
+                DrawCircleV(sw.pos, sw.baseR * (1.0f + t * 2.0f),
+                            Fade((Color){255, 240, 200, 255}, (0.25f - t) * 2.2f));
+            }
+        }
+        EndBlendMode();
         if (vectorsOn) {
             // velocity arrows: tip = position 0.35s from now at current velocity
             for (const Body& b : bodies) {
@@ -382,7 +453,8 @@ int main() {
         if (UIToggle({px, y, halfW, 32}, "Trails (T)", trailsOn)) trailsOn = !trailsOn;
         if (UIToggle({px + halfW + 8, y, halfW, 32}, "Grid (G)", gridOn)) gridOn = !gridOn;
         y += 36;
-        if (UIToggle({px, y, pw, 32}, "Velocity Vectors (V)", vectorsOn)) vectorsOn = !vectorsOn;
+        if (UIToggle({px, y, halfW, 32}, "Vectors (V)", vectorsOn)) vectorsOn = !vectorsOn;
+        if (UIToggle({px + halfW + 8, y, halfW, 32}, "Field (B)", fieldOn)) fieldOn = !fieldOn;
         y += 36;
         UISectionHeader("COLLISION (M)", px, y, pw);
         y += 26;

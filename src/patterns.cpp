@@ -46,7 +46,7 @@ static void SpawnPlanetRing(std::vector<Body>& bodies, Vector2 c) {
 static void SpawnGalaxy(std::vector<Body>& bodies, Vector2 c) {
     float coreMass = 12000.0f;
     AddBody(bodies, c, {0, 0}, coreMass);
-    int count = 150;
+    int count = 400;
     for (int i = 0; i < count; i++) {
         float r = 100.0f + powf((float)GetRandomValue(0, 1000) / 1000.0f, 1.5f) * 450.0f;
         float ang = GetRandomValue(0, 359) * DEG2RAD;
@@ -119,7 +119,7 @@ static void SpawnCollision(std::vector<Body>& bodies, Vector2 c) {
         Vector2 drift = {-side * 35.0f, -side * 8.0f};
         float coreMass = 6000.0f;
         AddBody(bodies, core, drift, coreMass);
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < 150; i++) {
             float r = 60.0f + powf((float)GetRandomValue(0, 1000) / 1000.0f, 1.5f) * 220.0f;
             float ang = GetRandomValue(0, 359) * DEG2RAD;
             Vector2 pos = {core.x + cosf(ang) * r, core.y + sinf(ang) * r};

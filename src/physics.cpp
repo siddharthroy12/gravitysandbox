@@ -2,30 +2,171 @@
 
 #include "raymath.h"
 #include <algorithm>
+#include <cmath>
+#include <unordered_map>
+
+// Above this body count, forces switch from brute force to Barnes-Hut and
+// collision pairing switches from all-pairs to a uniform grid.
+static const size_t ACCEL_TREE_THRESHOLD = 200;
+
+// ---------- Barnes-Hut quadtree ----------
+
+namespace {
+
+struct BHNode {
+    float cx, cy, half;              // square bounds
+    float mass = 0;
+    Vector2 com = {0, 0};
+    int child[4] = {-1, -1, -1, -1};
+    int body = -1;                   // >=0: leaf with that body; -2: aggregated leaf
+    int count = 0;
+};
+
+constexpr float BH_THETA = 0.7f;
+constexpr int BH_MAX_DEPTH = 24;
+
+int NewNode(std::vector<BHNode>& nodes, float cx, float cy, float half) {
+    BHNode n;
+    n.cx = cx;
+    n.cy = cy;
+    n.half = half;
+    nodes.push_back(n);
+    return (int)nodes.size() - 1;
+}
+
+void Insert(std::vector<BHNode>& nodes, int idx, const std::vector<Vector2>& pos,
+            const std::vector<float>& mass, int bi, int depth);
+
+void InsertIntoChild(std::vector<BHNode>& nodes, int idx, const std::vector<Vector2>& pos,
+                     const std::vector<float>& mass, int bi, int depth) {
+    // NewNode may reallocate `nodes`; only use indices across that call
+    float cx = nodes[idx].cx, cy = nodes[idx].cy, half = nodes[idx].half;
+    int q = (pos[bi].x >= cx ? 1 : 0) | (pos[bi].y >= cy ? 2 : 0);
+    if (nodes[idx].child[q] == -1) {
+        float h = half / 2;
+        int c = NewNode(nodes, cx + ((q & 1) ? h : -h), cy + ((q & 2) ? h : -h), h);
+        nodes[idx].child[q] = c;
+    }
+    Insert(nodes, nodes[idx].child[q], pos, mass, bi, depth + 1);
+}
+
+void Insert(std::vector<BHNode>& nodes, int idx, const std::vector<Vector2>& pos,
+            const std::vector<float>& mass, int bi, int depth) {
+    {
+        BHNode& n = nodes[idx];
+        float tm = n.mass + mass[bi];
+        n.com.x = (n.com.x * n.mass + pos[bi].x * mass[bi]) / tm;
+        n.com.y = (n.com.y * n.mass + pos[bi].y * mass[bi]) / tm;
+        n.mass = tm;
+        n.count++;
+    }
+    if (nodes[idx].count == 1) {
+        nodes[idx].body = bi;
+        return;
+    }
+    if (depth >= BH_MAX_DEPTH) {
+        nodes[idx].body = -2;   // coincident points: aggregate instead of subdividing forever
+        return;
+    }
+    if (nodes[idx].body >= 0) {
+        int old = nodes[idx].body;
+        nodes[idx].body = -1;
+        InsertIntoChild(nodes, idx, pos, mass, old, depth);
+    }
+    InsertIntoChild(nodes, idx, pos, mass, bi, depth);
+}
+
+Vector2 BHAccel(const std::vector<BHNode>& nodes, std::vector<int>& stack, Vector2 p, int self) {
+    Vector2 acc = {0, 0};
+    stack.clear();
+    stack.push_back(0);
+    while (!stack.empty()) {
+        int idx = stack.back();
+        stack.pop_back();
+        const BHNode& n = nodes[idx];
+        if (n.mass <= 0) continue;
+        if (n.body == self && n.count == 1) continue;   // the leaf that is exactly us
+
+        Vector2 d = {n.com.x - p.x, n.com.y - p.y};
+        float dist2 = d.x * d.x + d.y * d.y;
+        bool leaf = (n.body != -1) ||
+                    (n.child[0] == -1 && n.child[1] == -1 && n.child[2] == -1 && n.child[3] == -1);
+        float s = n.half * 2;
+        if (leaf || s * s < BH_THETA * BH_THETA * dist2) {
+            float inv = 1.0f / sqrtf(dist2 + SOFTENING2);
+            float inv3 = inv * inv * inv;
+            acc.x += G * n.mass * d.x * inv3;
+            acc.y += G * n.mass * d.y * inv3;
+        } else {
+            for (int k = 0; k < 4; k++) {
+                if (n.child[k] != -1) stack.push_back(n.child[k]);
+            }
+        }
+    }
+    return acc;
+}
+
+}   // namespace
+
+Vector2 GravityFieldAt(const std::vector<Body>& bodies, Vector2 p) {
+    Vector2 acc = {0, 0};
+    for (const Body& b : bodies) {
+        Vector2 d = Vector2Subtract(b.pos, p);
+        float inv = 1.0f / sqrtf(d.x * d.x + d.y * d.y + SOFTENING2);
+        float inv3 = inv * inv * inv;
+        acc.x += G * b.mass * d.x * inv3;
+        acc.y += G * b.mass * d.y * inv3;
+    }
+    return acc;
+}
+
+// ---------- integration + collisions ----------
 
 void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisionMode,
-                 bool recordTrail, int trailLength) {
+                 bool recordTrail, int trailLength, std::vector<ImpactEvent>* impacts) {
     size_t n = bodies.size();
     std::vector<Vector2> accel(n, {0, 0});
 
-    for (size_t i = 0; i < n; i++) {
-        if (!bodies[i].alive) continue;
-        for (size_t j = i + 1; j < n; j++) {
-            if (!bodies[j].alive) continue;
-            Vector2 d = Vector2Subtract(bodies[j].pos, bodies[i].pos);
-            float dist2 = d.x * d.x + d.y * d.y + SOFTENING2;
-            float invDist = 1.0f / sqrtf(dist2);
-            float invDist3 = invDist * invDist * invDist;
+    if (n >= ACCEL_TREE_THRESHOLD) {
+        // Barnes-Hut: O(n log n)
+        std::vector<Vector2> pos(n);
+        std::vector<float> mass(n);
+        float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
+        for (size_t i = 0; i < n; i++) {
+            pos[i] = bodies[i].pos;
+            mass[i] = bodies[i].mass;
+            minX = fminf(minX, pos[i].x);
+            maxX = fmaxf(maxX, pos[i].x);
+            minY = fminf(minY, pos[i].y);
+            maxY = fmaxf(maxY, pos[i].y);
+        }
+        float half = fmaxf(maxX - minX, maxY - minY) / 2 * 1.01f + 1.0f;
+        std::vector<BHNode> nodes;
+        nodes.reserve(2 * n);
+        NewNode(nodes, (minX + maxX) / 2, (minY + maxY) / 2, half);
+        for (size_t i = 0; i < n; i++) Insert(nodes, 0, pos, mass, (int)i, 0);
 
-            Vector2 forceDir = Vector2Scale(d, invDist3);
-            accel[i] = Vector2Add(accel[i], Vector2Scale(forceDir, G * bodies[j].mass));
-            accel[j] = Vector2Subtract(accel[j], Vector2Scale(forceDir, G * bodies[i].mass));
+        std::vector<int> stack;
+        stack.reserve(64);
+        for (size_t i = 0; i < n; i++) accel[i] = BHAccel(nodes, stack, pos[i], (int)i);
+    } else {
+        // brute force: O(n^2), slightly more accurate for small scenes
+        for (size_t i = 0; i < n; i++) {
+            for (size_t j = i + 1; j < n; j++) {
+                Vector2 d = Vector2Subtract(bodies[j].pos, bodies[i].pos);
+                float dist2 = d.x * d.x + d.y * d.y + SOFTENING2;
+                float invDist = 1.0f / sqrtf(dist2);
+                float invDist3 = invDist * invDist * invDist;
+
+                Vector2 forceDir = Vector2Scale(d, invDist3);
+                accel[i] = Vector2Add(accel[i], Vector2Scale(forceDir, G * bodies[j].mass));
+                accel[j] = Vector2Subtract(accel[j], Vector2Scale(forceDir, G * bodies[i].mass));
+            }
         }
     }
 
     std::vector<Vector2> oldPos(n);
     for (size_t i = 0; i < n; i++) {
-        if (!bodies[i].alive) continue;
         oldPos[i] = bodies[i].pos;
         bodies[i].vel = Vector2Add(bodies[i].vel, Vector2Scale(accel[i], dt));
         bodies[i].pos = Vector2Add(bodies[i].pos, Vector2Scale(bodies[i].vel, dt));
@@ -53,53 +194,94 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
     };
 
     std::vector<Body> debris;
-    for (size_t i = 0; i < n; i++) {
-        if (!bodies[i].alive) continue;
-        for (size_t j = i + 1; j < n; j++) {
-            if (!bodies[j].alive) continue;
-            float dist = pairMinDist(i, j);
-            float minDist = MassToRadius(bodies[i].mass) + MassToRadius(bodies[j].mass);
-            if (dist < minDist) {
-                float m1 = bodies[i].mass, m2 = bodies[j].mass;
-                float totalMass = m1 + m2;
-                Body& big = (m1 >= m2) ? bodies[i] : bodies[j];
-                Body& small = (m1 >= m2) ? bodies[j] : bodies[i];
-                float impactSpeed = Vector2Length(Vector2Subtract(big.vel, small.vel));
+    auto tryCollide = [&](size_t i, size_t j) {
+        if (!bodies[i].alive || !bodies[j].alive) return;
+        float dist = pairMinDist(i, j);
+        float minDist = MassToRadius(bodies[i].mass) + MassToRadius(bodies[j].mass);
+        if (dist >= minDist) return;
 
-                // perfectly inelastic merge, conserves momentum
-                big.vel = Vector2Scale(Vector2Add(Vector2Scale(big.vel, big.mass),
-                                                   Vector2Scale(small.vel, small.mass)),
-                                        1.0f / totalMass);
-                big.pos = Vector2Scale(Vector2Add(Vector2Scale(big.pos, big.mass),
-                                                   Vector2Scale(small.pos, small.mass)),
-                                        1.0f / totalMass);
-                big.mass = totalMass;
-                small.alive = false;
+        float m1 = bodies[i].mass, m2 = bodies[j].mass;
+        float totalMass = m1 + m2;
+        Body& big = (m1 >= m2) ? bodies[i] : bodies[j];
+        Body& small = (m1 >= m2) ? bodies[j] : bodies[i];
+        float impactSpeed = Vector2Length(Vector2Subtract(big.vel, small.vel));
 
-                // spray part of the smaller body back out as fragments
-                float debrisMass = 0.25f * std::min(m1, m2);
-                if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f) {
-                    int count = (int)Clamp(debrisMass / 3.0f, 3.0f, 8.0f);
-                    float fragMass = debrisMass / count;
-                    big.mass = totalMass - debrisMass;
-                    float kick = fmaxf(impactSpeed * 0.5f, 40.0f);
-                    float spawnR = MassToRadius(big.mass) + MassToRadius(fragMass) + 6.0f;
-                    float baseAng = GetRandomValue(0, 359) * DEG2RAD;
-                    // even angular spread keeps the net fragment momentum near zero
-                    for (int k = 0; k < count; k++) {
-                        float a = baseAng + 2.0f * PI * k / count;
-                        Vector2 dir = {cosf(a), sinf(a)};
-                        Body d;
-                        d.pos = Vector2Add(big.pos, Vector2Scale(dir, spawnR));
-                        d.vel = Vector2Add(big.vel,
-                                            Vector2Scale(dir, kick * (0.8f + GetRandomValue(0, 40) / 100.0f)));
-                        d.mass = fragMass;
-                        d.color = ColorForMass(fragMass);
-                        d.id = g_nextBodyId++;
-                        debris.push_back(d);
-                    }
+        // perfectly inelastic merge, conserves momentum
+        big.vel = Vector2Scale(Vector2Add(Vector2Scale(big.vel, big.mass),
+                                           Vector2Scale(small.vel, small.mass)),
+                                1.0f / totalMass);
+        big.pos = Vector2Scale(Vector2Add(Vector2Scale(big.pos, big.mass),
+                                           Vector2Scale(small.pos, small.mass)),
+                                1.0f / totalMass);
+        big.mass = totalMass;
+        small.alive = false;
+
+        // spray part of the smaller body back out as fragments
+        float debrisMass = 0.25f * std::min(m1, m2);
+        if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f) {
+            int count = (int)Clamp(debrisMass / 3.0f, 3.0f, 8.0f);
+            float fragMass = debrisMass / count;
+            big.mass = totalMass - debrisMass;
+            float kick = fmaxf(impactSpeed * 0.5f, 40.0f);
+            float spawnR = MassToRadius(big.mass) + MassToRadius(fragMass) + 6.0f;
+            float baseAng = GetRandomValue(0, 359) * DEG2RAD;
+            // even angular spread keeps the net fragment momentum near zero
+            for (int k = 0; k < count; k++) {
+                float a = baseAng + 2.0f * PI * k / count;
+                Vector2 dir = {cosf(a), sinf(a)};
+                Body d;
+                d.pos = Vector2Add(big.pos, Vector2Scale(dir, spawnR));
+                d.vel = Vector2Add(big.vel,
+                                    Vector2Scale(dir, kick * (0.8f + GetRandomValue(0, 40) / 100.0f)));
+                d.mass = fragMass;
+                d.color = ColorForMass(fragMass);
+                d.id = g_nextBodyId++;
+                debris.push_back(d);
+            }
+        }
+        big.color = ColorForMass(big.mass);
+
+        if (impacts) {
+            float mu = m1 * m2 / totalMass;   // reduced mass
+            impacts->push_back({big.pos, 0.5f * mu * impactSpeed * impactSpeed,
+                                MassToRadius(big.mass)});
+        }
+    };
+
+    if (n < ACCEL_TREE_THRESHOLD) {
+        for (size_t i = 0; i < n; i++) {
+            for (size_t j = i + 1; j < n; j++) tryCollide(i, j);
+        }
+    } else {
+        // uniform grid over each body's swept AABB; duplicate pair tests are
+        // harmless (the alive checks make the second test a no-op)
+        float maxR = 0;
+        for (size_t i = 0; i < n; i++) maxR = fmaxf(maxR, MassToRadius(bodies[i].mass));
+        float cell = fmaxf(64.0f, 2.5f * maxR);
+        std::unordered_map<long long, std::vector<int>> grid;
+        auto cellKey = [](int ix, int iy) {
+            return ((long long)ix << 32) ^ (unsigned int)iy;
+        };
+        for (size_t i = 0; i < n; i++) {
+            float r = MassToRadius(bodies[i].mass);
+            float minX = fminf(oldPos[i].x, bodies[i].pos.x) - r;
+            float maxX = fmaxf(oldPos[i].x, bodies[i].pos.x) + r;
+            float minY = fminf(oldPos[i].y, bodies[i].pos.y) - r;
+            float maxY = fmaxf(oldPos[i].y, bodies[i].pos.y) + r;
+            int x0 = (int)floorf(minX / cell), x1 = (int)floorf(maxX / cell);
+            int y0 = (int)floorf(minY / cell), y1 = (int)floorf(maxY / cell);
+            x1 = std::min(x1, x0 + 7);   // cap span for absurdly fast bodies
+            y1 = std::min(y1, y0 + 7);
+            for (int ix = x0; ix <= x1; ix++) {
+                for (int iy = y0; iy <= y1; iy++) {
+                    grid[cellKey(ix, iy)].push_back((int)i);
                 }
-                big.color = ColorForMass(big.mass);
+            }
+        }
+        for (auto& kv : grid) {
+            std::vector<int>& v = kv.second;
+            for (size_t a = 0; a < v.size(); a++) {
+                for (size_t b = a + 1; b < v.size(); b++) tryCollide(v[a], v[b]);
             }
         }
     }

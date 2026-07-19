@@ -13,7 +13,8 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 - **Patterns** — 10 presets placed with a mouse-follow ghost preview: Solar System, Binary Stars, Planet + Ring, Spiral Galaxy, Grid Collapse, Random Cloud, Figure-8, Moons, Collision, Comets
 - **Camera** — infinite pan (right/middle drag), zoom to cursor (wheel), reset view, jump to barycenter of all bodies, or double-click a body to follow it
 - **Time** — sim-speed slider (0.1x–10x) and single-frame stepping while paused
-- **Inspection** — toggleable per-body velocity vectors
+- **Inspection** — toggleable per-body velocity vectors and a live gravity vector-field overlay (Lagrange regions show up as gaps)
+- **Effects** — additive glow halos on heavy stars and energy-scaled shockwave rings on impacts
 - **Rendering** — motion trails with adjustable length, adaptive world grid, 4x MSAA, native-resolution (HiDPI) output, Inter font UI
 
 ## Controls
@@ -30,6 +31,7 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 | `T` | Toggle trails |
 | `G` | Toggle grid |
 | `V` | Toggle velocity vectors |
+| `B` | Toggle gravity field overlay |
 | `.` | Advance one frame while paused |
 | `M` | Cycle collision mode (none / merge / debris) |
 | `R` | Reset view |
@@ -98,7 +100,7 @@ sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev \
 
 ## Physics notes
 
-- Forces are computed brute-force over all pairs (O(n²)) with a softening term (`SOFTENING2`) that caps close-range forces and avoids singularities.
+- Forces use a Barnes-Hut quadtree (θ = 0.7, O(n log n)) above 200 bodies and brute-force pairwise summation below, both with a softening term (`SOFTENING2`) that caps close-range forces and avoids singularities. Collision pairing likewise switches to a uniform spatial grid over each body's swept path when the scene is large.
 - Integration is semi-implicit (symplectic) Euler at 2 substeps per frame, which keeps orbits stable over long runs.
 - When merging is enabled, bodies whose cores overlap combine into one, conserving mass and momentum; the merged color and radius follow the new mass.
 - The Figure-8 pattern uses the Chenciner–Montgomery three-body choreography initial conditions, rescaled from normalized units to the simulation's G and pixel scale.
