@@ -37,6 +37,15 @@
     <script>
         var Module = {
             canvas: document.getElementById('canvas'),
+            // raylib's web ToggleBorderlessWindowed()/ToggleFullscreen() call
+            // Module.requestFullscreen(), but emscripten only defines that when
+            // built with -sEXPORTED_RUNTIME_METHODS=requestFullscreen. Delegate
+            // to the glue's Browser helper instead (GLFW's web port overrides it
+            // at init with the version that resizes the canvas and notifies
+            // raylib's resize listeners).
+            requestFullscreen: function(lockPointer, resizeCanvas) {
+                Browser.requestFullscreen(lockPointer, resizeCanvas);
+            },
             onRuntimeInitialized: function() {
                 document.getElementById('status').style.display = 'none';
             }
