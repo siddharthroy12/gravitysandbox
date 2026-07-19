@@ -39,7 +39,7 @@ index b95121d..5ebb264 100644
 +        if ((canvasWidth > 0.0) && (canvasHeight > 0.0))
 +        {
 +            CORE.Input.Mouse.currentPosition.x = mouseEvent->targetX*((float)GetScreenWidth()/(float)canvasWidth);
-+            CORE.Input.Mouse.currentPosition.y = mouseEvent->targetY*((float)GetScreenHeight()/(float)canvasWidth);
++            CORE.Input.Mouse.currentPosition.y = mouseEvent->targetY*((float)GetScreenHeight()/(float)canvasHeight);
 +            CORE.Input.Touch.position[0] = CORE.Input.Mouse.currentPosition;
 +        }
 +    }
