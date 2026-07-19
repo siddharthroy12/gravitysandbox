@@ -25,7 +25,10 @@ if(EMSCRIPTEN)
     target_link_options(gravity_sandbox PRIVATE
         "-sUSE_GLFW=3"
         "-sALLOW_MEMORY_GROWTH=1"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/assets@assets")
+        "--preload-file" "${CMAKE_SOURCE_DIR}/assets@assets"
+        "--shell-file" "${CMAKE_SOURCE_DIR}/web/shell.html")
+    set_target_properties(gravity_sandbox PROPERTIES
+        LINK_DEPENDS "${CMAKE_SOURCE_DIR}/web/shell.html")
 endif()
 
 add_custom_command(TARGET gravity_sandbox POST_BUILD
