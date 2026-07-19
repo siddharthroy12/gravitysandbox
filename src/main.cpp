@@ -2,6 +2,7 @@
 #include "raymath.h"
 
 #include "body.h"
+#include "curvature.h"
 #include "patterns.h"
 #include "physics.h"
 #include "ui.h"
@@ -58,7 +59,7 @@ static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHei
 
 // ---------- app state (file scope so the web main-loop callback can reach it) ----------
 
-static std::vector<Body> bodies;
+static std::vector<Body> bodies = MakePattern(PAT_SOLAR, {0, 0});   // TEMP
 static Camera2D camera = {0};
 
 static float currentMass = 50.0f;
@@ -85,6 +86,7 @@ static const int previewSteps = 300;                // 300 * 1/60 = 5s of lookah
 static const float previewDotSpacing = 7.0f;        // screen px between preview dots
 static bool vectorsOn = false;                      // per-body velocity arrows
 static bool fieldOn = false;                        // gravity field visualization
+static bool curvatureOn = false;                    // shader-warped spacetime grid
 static std::vector<Shockwave> shockwaves;
 static float simSpeed = 1.0f;                       // time multiplier, 0.1x - 10x
 static bool draggingSpeedSlider = false;
@@ -210,7 +212,7 @@ static void UpdateDrawFrame() {
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
     camera.offset = {screenWidth / 2.0f, screenHeight / 2.0f};
-    const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f, 718.0f};
+    const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f, 754.0f};
     Vector2 mouseScreen = GetMousePosition();
     Vector2 mouseWorld = GetScreenToWorld2D(mouseScreen, camera);
     bool mouseOverUI = CheckCollisionPointRec(mouseScreen, panel) || draggingSlider ||
@@ -316,6 +318,7 @@ static void UpdateDrawFrame() {
     if (IsKeyPressed(KEY_M)) collisionMode = (collisionMode + 1) % 3;
     if (IsKeyPressed(KEY_V)) vectorsOn = !vectorsOn;
     if (IsKeyPressed(KEY_B)) fieldOn = !fieldOn;
+    if (IsKeyPressed(KEY_W)) curvatureOn = !curvatureOn;
 
     auto centerOnBodies = [&]() {
         if (bodies.empty()) return;
@@ -386,11 +389,16 @@ static void UpdateDrawFrame() {
     // from the actual framebuffer ratio: on web GetWindowScaleDPI() reports
     // devicePixelRatio even though the framebuffer is logical-sized.
     float fbScale = (float)GetRenderWidth() / (float)screenWidth;
+
+    // shader-warped spacetime grid replaces the flat grid while active
+    bool curvedGrid = curvatureOn && CurvatureReady();
+    if (curvedGrid) CurvatureDraw(bodies, camera, screenWidth, screenHeight, fbScale);
+
     Camera2D camRender = camera;
     camRender.offset = {camera.offset.x * fbScale, camera.offset.y * fbScale};
     camRender.zoom = camera.zoom * fbScale;
     BeginMode2D(camRender);
-    if (gridOn) DrawSpaceGrid(camera, screenWidth, screenHeight);
+    if (gridOn && !curvedGrid) DrawSpaceGrid(camera, screenWidth, screenHeight);
 
     if (fieldOn) {
         // gravity vector field sampled on a screen-space grid; arrow length
@@ -645,6 +653,9 @@ static void UpdateDrawFrame() {
     if (UIToggle({px + halfW + 8, y, halfW, 32}, "Field (B)", fieldOn,
                  "Gravity field arrows; gaps mark Lagrange regions")) fieldOn = !fieldOn;
     y += 36;
+    if (UIToggle({px, y, pw, 32}, "Space Curvature (W)", curvatureOn,
+                 "Grid bends into gravity wells (GPU shader)")) curvatureOn = !curvatureOn;
+    y += 36;
     UISectionHeader("COLLISION (M)", px, y, pw);
     y += 26;
     float w3 = (pw - 16) / 3;
@@ -776,6 +787,7 @@ int main() {
     UILoadFont();
     InitSandboxAudio();
     UIInitAudio();
+    CurvatureLoad();
 
     camera.offset = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
     camera.target = {0, 0};
@@ -787,6 +799,7 @@ int main() {
     while (!WindowShouldClose()) UpdateDrawFrame();
 #endif
 
+    CurvatureUnload();
     UICloseAudio();
     CloseSandboxAudio();
     CloseWindow();

@@ -19,6 +19,7 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 - **Time** — sim-speed slider (0.1x–10x) and single-frame stepping while paused
 - **Inspection** — toggleable per-body velocity vectors and a live gravity vector-field overlay (Lagrange regions show up as gaps)
 - **Effects** — additive glow halos on heavy stars and energy-scaled shockwave rings on impacts
+- **Space curvature** — a GPU fragment shader warps the grid into gravity wells around the heaviest bodies, rubber-sheet style (works on desktop GL and WebGL)
 - **Rendering** — motion trails with adjustable length, adaptive world grid, 4x MSAA, native-resolution (HiDPI) output, Inter font UI with hover tooltips on every control
 
 ## Controls
@@ -36,6 +37,7 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 | `G` | Toggle grid |
 | `V` | Toggle velocity vectors |
 | `B` | Toggle gravity field overlay |
+| `W` | Toggle space-curvature grid (shader) |
 | `.` | Advance one frame while paused |
 | `M` | Cycle collision mode (none / merge / debris) |
 | `R` | Reset view |

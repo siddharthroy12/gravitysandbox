@@ -38,6 +38,7 @@ add_subdirectory(vendor/raylib)
 
 add_executable(gravity_sandbox
     src/main.cpp
+    src/curvature.cpp
     src/physics.cpp
     src/patterns.cpp
     src/ui.cpp)
