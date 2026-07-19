@@ -421,8 +421,11 @@ static void UpdateDrawFrame() {
 
     // stride trail points when crowded so draw cost stays bounded
     int trailStride = 1 + (int)(bodies.size() / 300);
+    bool dustTrails = bodies.size() < 500;   // in dense scenes dust reads better without trails
+    float dustSize = fmaxf(2.4f, 2.0f / camera.zoom);   // never shrinks below ~2 screen px
     for (auto& b : bodies) {
-        if (trailsOn && (int)b.trail.size() > trailStride) {
+        bool dust = IsDust(b.mass);
+        if (trailsOn && (dustTrails || !dust) && (int)b.trail.size() > trailStride) {
             float trailWidth = std::max(2.0f, MassToRadius(b.mass) * 0.35f);
             for (size_t k = trailStride; k < b.trail.size(); k += trailStride) {
                 float a = (float)k / b.trail.size();
@@ -430,11 +433,26 @@ static void UpdateDrawFrame() {
                 DrawLineEx(b.trail[k - trailStride], b.trail[k], trailWidth * a, c);
             }
         }
-        DrawCircleV(b.pos, MassToRadius(b.mass), b.color);
+        if (dust) {
+            // bright quad core; the soft halo comes from the additive pass below
+            Color core = {(unsigned char)((b.color.r + 255) / 2),
+                          (unsigned char)((b.color.g + 255) / 2),
+                          (unsigned char)((b.color.b + 255) / 2), 255};
+            DrawRectangleRec({b.pos.x - dustSize / 2, b.pos.y - dustSize / 2, dustSize, dustSize},
+                             core);
+        } else {
+            DrawCircleV(b.pos, MassToRadius(b.mass), b.color);
+        }
     }
 
-    // additive pass: hot halos on heavy bodies, then impact shockwaves
+    // additive pass: dust glow, hot halos on heavy bodies, then impact shockwaves
     BeginBlendMode(BLEND_ADDITIVE);
+    float dustGlow = dustSize * 2.6f;
+    for (const Body& b : bodies) {
+        if (!IsDust(b.mass)) continue;
+        DrawRectangleRec({b.pos.x - dustGlow / 2, b.pos.y - dustGlow / 2, dustGlow, dustGlow},
+                         Fade(b.color, 0.22f));
+    }
     for (const Body& b : bodies) {
         if (b.mass < 800.0f) continue;
         float r = MassToRadius(b.mass);
@@ -534,10 +552,16 @@ static void UpdateDrawFrame() {
         }
     } else if (pendingPattern != PAT_NONE && !mouseOverUI) {
         // ghost preview of the pattern, centered on the cursor
+        float ghostDust = fmaxf(2.4f, 2.0f / camera.zoom);
         for (const Body& b : previewBodies) {
             Vector2 p = Vector2Add(b.pos, mouseWorld);
-            DrawCircleV(p, MassToRadius(b.mass), Fade(b.color, 0.4f));
-            DrawCircleLinesV(p, MassToRadius(b.mass), Fade(WHITE, 0.25f));
+            if (IsDust(b.mass)) {
+                DrawRectangleRec({p.x - ghostDust / 2, p.y - ghostDust / 2, ghostDust, ghostDust},
+                                 Fade(b.color, 0.5f));
+            } else {
+                DrawCircleV(p, MassToRadius(b.mass), Fade(b.color, 0.4f));
+                DrawCircleLinesV(p, MassToRadius(b.mass), Fade(WHITE, 0.25f));
+            }
         }
         DrawCircleLinesV(mouseWorld, 6.0f / camera.zoom, Fade(WHITE, 0.6f));
     } else if (!draggingBody && !mouseOverUI && pendingPattern == PAT_NONE) {

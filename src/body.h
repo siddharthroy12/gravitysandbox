@@ -21,8 +21,23 @@ inline int g_nextBodyId = 1;
 inline constexpr float G = 1500.0f;
 inline constexpr float SOFTENING2 = 400.0f;   // softening^2, avoids singularities at close range
 
+// Bodies lighter than this render as glowing points ("dust") instead of
+// circles, which keeps multi-thousand-body scenes cheap to draw.
+inline constexpr float DUST_MASS_MAX = 5.0f;
+
+inline bool IsDust(float mass) {
+    return mass < DUST_MASS_MAX;
+}
+
 inline float MassToRadius(float mass) {
     return 3.0f + cbrtf(mass) * 1.6f;
+}
+
+// Radius used for collision tests. Dust renders as a small point, so it also
+// collides as one; without this, dense dust fields merge away in seconds
+// through contacts that are invisible on screen.
+inline float CollisionRadius(float mass) {
+    return IsDust(mass) ? 1.4f : MassToRadius(mass);
 }
 
 inline Color ColorForMass(float mass) {

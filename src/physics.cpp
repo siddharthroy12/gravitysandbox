@@ -185,7 +185,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
 
                 Vector2 toSmall = Vector2Subtract(small.pos, heavy.pos);
                 float distance = Vector2Length(toSmall);
-                float contact = MassToRadius(heavy.mass) + MassToRadius(small.mass);
+                float contact = CollisionRadius(heavy.mass) + CollisionRadius(small.mass);
                 // A gameplay-tuned Roche-like limit: it grows with the cube
                 // root of mass ratio but remains close enough to feel like a
                 // deep pass rather than a distant gravitational pull.
@@ -240,7 +240,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
     auto tryCollide = [&](size_t i, size_t j) {
         if (!bodies[i].alive || !bodies[j].alive) return;
         float dist = pairMinDist(i, j);
-        float minDist = MassToRadius(bodies[i].mass) + MassToRadius(bodies[j].mass);
+        float minDist = CollisionRadius(bodies[i].mass) + CollisionRadius(bodies[j].mass);
         if (dist >= minDist) return;
 
         float m1 = bodies[i].mass, m2 = bodies[j].mass;
@@ -299,14 +299,14 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         // uniform grid over each body's swept AABB; duplicate pair tests are
         // harmless (the alive checks make the second test a no-op)
         float maxR = 0;
-        for (size_t i = 0; i < n; i++) maxR = fmaxf(maxR, MassToRadius(bodies[i].mass));
+        for (size_t i = 0; i < n; i++) maxR = fmaxf(maxR, CollisionRadius(bodies[i].mass));
         float cell = fmaxf(64.0f, 2.5f * maxR);
         std::unordered_map<long long, std::vector<int>> grid;
         auto cellKey = [](int ix, int iy) {
             return ((long long)ix << 32) ^ (unsigned int)iy;
         };
         for (size_t i = 0; i < n; i++) {
-            float r = MassToRadius(bodies[i].mass);
+            float r = CollisionRadius(bodies[i].mass);
             float minX = fminf(oldPos[i].x, bodies[i].pos.x) - r;
             float maxX = fmaxf(oldPos[i].x, bodies[i].pos.x) + r;
             float minY = fminf(oldPos[i].y, bodies[i].pos.y) - r;
