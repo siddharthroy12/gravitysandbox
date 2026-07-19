@@ -138,6 +138,9 @@ void CurvatureDraw(const std::vector<Body>& bodies, const Camera2D& camera,
     }
 
     BeginShaderMode(g_shader);
-    DrawRectangle(0, 0, screenWidth, screenHeight, WHITE);
+    // Size the quad to the raw framebuffer: on the web there is no screen-scale
+    // matrix outside a camera, so logical-sized quads only cover part of the
+    // HiDPI canvas. Desktop's HIGHDPI matrix makes this overdraw; that's clipped.
+    DrawRectangle(0, 0, GetRenderWidth(), GetRenderHeight(), WHITE);
     EndShaderMode();
 }

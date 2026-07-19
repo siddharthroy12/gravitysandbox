@@ -59,7 +59,7 @@ static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHei
 
 // ---------- app state (file scope so the web main-loop callback can reach it) ----------
 
-static std::vector<Body> bodies = MakePattern(PAT_SOLAR, {0, 0});   // TEMP
+static std::vector<Body> bodies;
 static Camera2D camera = {0};
 
 static float currentMass = 50.0f;
