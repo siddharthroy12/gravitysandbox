@@ -46,6 +46,9 @@ static void SpawnPlanetRing(std::vector<Body>& bodies, Vector2 c) {
 static void SpawnGalaxy(std::vector<Body>& bodies, Vector2 c) {
     float coreMass = 12000.0f;
     AddBody(bodies, c, {0, 0}, coreMass);
+    Body& core = bodies.back();
+    core.isBlackHole = true;
+    core.color = {168, 120, 255, 255};   // accretion violet, used by trails
     int count = 2500;
     for (int i = 0; i < count; i++) {
         // sqrt gives uniform surface density; a core-heavy disk merges itself

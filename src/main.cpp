@@ -752,7 +752,8 @@ static void UpdateDrawFrame() {
     patternButton({col2, y, colW, 32}, "Binary", PAT_BINARY, "Two stars orbiting their shared center");
     y += 36;
     patternButton({px, y, colW, 32}, "Ring", PAT_RING, "A star with a ring of small bodies");
-    patternButton({col2, y, colW, 32}, "Galaxy", PAT_GALAXY, "A spiral galaxy of 400 orbiting dots");
+    patternButton({col2, y, colW, 32}, "Galaxy", PAT_GALAXY,
+                  "A spiral galaxy orbiting a central black hole");
     y += 36;
     patternButton({px, y, colW, 32}, "Grid", PAT_GRID, "A grid of dots at rest that collapses into clumps");
     patternButton({col2, y, colW, 32}, "Cloud", PAT_CLOUD, "A random cloud at rest that collapses into clumps");
