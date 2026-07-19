@@ -41,7 +41,7 @@ static const char* CURV_FS_BODY =
     "        depth += pull;\n"
     "    }\n"
     "\n"
-    "    vec2 warped = world + disp;\n"
+    "    vec2 warped = world - disp;\n"   // lines bend toward the well, not away
     "    vec2 cell = abs(fract(warped/uSpacing - 0.5) - 0.5)*uSpacing;\n"
     "    float distLine = min(cell.x, cell.y);\n"
     "    float px = 1.0/(uZoom*uFbScale);\n"             // world units per framebuffer pixel
