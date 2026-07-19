@@ -73,6 +73,10 @@ int main() {
     bool draggingSlider = false;
     int dragIndex = -1;
     Vector2 dragOffset = {0, 0};
+    bool flicking = false;                       // dragging out a new dot's launch velocity
+    Vector2 flickAnchor = {0, 0};
+    const float flickScale = 2.0f;               // px of pull -> px/s of launch speed
+    const float flickDeadzone = 6.0f;            // screen px; below this it's a plain click
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -107,10 +111,11 @@ int main() {
         if (IsKeyDown(KEY_DOWN)) currentMass *= 0.97f;
         currentMass = Clamp(currentMass, MASS_MIN, MASS_MAX);
 
-        // Esc cancels pending pattern placement
+        // Esc cancels pending pattern placement or an in-progress flick
         if (IsKeyPressed(KEY_ESCAPE)) {
             pendingPattern = PAT_NONE;
             previewBodies.clear();
+            flicking = false;
         }
 
         // left click: place pending pattern, grab existing body, or place a new dot
@@ -133,7 +138,9 @@ int main() {
                 }
             }
             if (!draggingBody) {
-                AddBody(bodies, mouseWorld, {0, 0}, currentMass);
+                // empty space: start a flick; the dot spawns on release
+                flicking = true;
+                flickAnchor = mouseWorld;
             }
         }
         if (draggingBody && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && dragIndex >= 0 &&
@@ -142,6 +149,15 @@ int main() {
             bodies[dragIndex].vel = {0, 0};
         }
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            if (flicking) {
+                // slingshot: launch opposite the pull direction
+                Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
+                Vector2 vel = (Vector2Length(pull) * camera.zoom < flickDeadzone)
+                                  ? Vector2{0, 0}
+                                  : Vector2Scale(pull, flickScale);
+                AddBody(bodies, flickAnchor, vel, currentMass);
+            }
+            flicking = false;
             draggingBody = false;
             dragIndex = -1;
         }
@@ -204,7 +220,25 @@ int main() {
             }
             DrawCircleV(b.pos, MassToRadius(b.mass), b.color);
         }
-        if (pendingPattern != PAT_NONE && !mouseOverUI) {
+        if (flicking) {
+            // ghost dot at the anchor, rubber band to the cursor, launch arrow opposite
+            float r = MassToRadius(currentMass);
+            DrawCircleV(flickAnchor, r, Fade(ColorForMass(currentMass), 0.5f));
+            DrawCircleLinesV(flickAnchor, r, Fade(WHITE, 0.5f));
+            Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
+            if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
+                DrawLineEx(flickAnchor, mouseWorld, 1.5f / camera.zoom, Fade(WHITE, 0.25f));
+                Vector2 tip = Vector2Add(flickAnchor, pull);
+                float thick = 2.5f / camera.zoom;
+                DrawLineEx(flickAnchor, tip, thick, WHITE);
+                Vector2 dir = Vector2Normalize(pull);
+                float head = 12.0f / camera.zoom;
+                DrawLineEx(tip, Vector2Add(tip, Vector2Scale(Vector2Rotate(dir, 150 * DEG2RAD), head)),
+                           thick, WHITE);
+                DrawLineEx(tip, Vector2Add(tip, Vector2Scale(Vector2Rotate(dir, -150 * DEG2RAD), head)),
+                           thick, WHITE);
+            }
+        } else if (pendingPattern != PAT_NONE && !mouseOverUI) {
             // ghost preview of the pattern, centered on the cursor
             for (const Body& b : previewBodies) {
                 Vector2 p = Vector2Add(b.pos, mouseWorld);
@@ -216,6 +250,16 @@ int main() {
             DrawCircleLinesV(mouseWorld, MassToRadius(currentMass), Fade(WHITE, 0.5f));
         }
         EndMode2D();
+
+        // flick speed readout, in screen space next to the arrow tip
+        if (flicking) {
+            Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
+            if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
+                Vector2 tipScreen = GetWorldToScreen2D(Vector2Add(flickAnchor, pull), camera);
+                UIText(TextFormat("%.0f", Vector2Length(pull) * flickScale),
+                       tipScreen.x + 10, tipScreen.y - 8, 16, UI_VALUE);
+            }
+        }
 
         // ---- UI panel ----
         DrawPanel(panel, UI_BORDER);
@@ -327,7 +371,7 @@ int main() {
         }
 
         // ---- hint bar (bottom-left) ----
-        const char* hints = "Left click: place / drag     Right / middle drag: pan     Wheel: zoom     Space: pause";
+        const char* hints = "Click: place dot     Drag: flick-launch     Right / middle drag: pan     Wheel: zoom     Space: pause";
         float htw = UITextWidth(hints, 16);
         Rectangle hintBar = {10, screenHeight - 44.0f, htw + 28.0f, 34};
         DrawPanel(hintBar, UI_BORDER);
