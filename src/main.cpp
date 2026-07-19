@@ -141,6 +141,8 @@ static float trailLength = 240.0f;                  // in samples; /60 = seconds
 static bool draggingTrailSlider = false;
 static int pendingPattern = PAT_NONE;
 static std::vector<Body> previewBodies;             // pattern preview, positions relative to cursor
+static bool patternFlicking = false;                // dragging out a pending pattern's launch velocity
+static Vector2 patternAnchor = {0, 0};              // world pos where the pattern flick started
 static bool draggingBody = false;
 static bool dragEngaged = false;                    // mouse moved past the deadzone: really dragging
 static bool draggingSlider = false;
@@ -318,19 +320,17 @@ static void UpdateDrawFrame() {
     if (IsKeyPressed(KEY_ESCAPE)) {
         pendingPattern = PAT_NONE;
         previewBodies.clear();
+        patternFlicking = false;
         flicking = false;
         followId = -1;
         followCenter = false;
     }
 
-    // left click: place pending pattern, grab existing body, or place a new dot
+    // left press with a pattern pending: start a flick; the pattern lands on
+    // release, at rest for a plain click or launched along the pull direction
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !mouseOverUI && pendingPattern != PAT_NONE) {
-        for (Body b : previewBodies) {
-            b.pos = Vector2Add(b.pos, mouseWorld);
-            bodies.push_back(b);
-        }
-        pendingPattern = PAT_NONE;
-        previewBodies.clear();
+        patternFlicking = true;
+        patternAnchor = mouseWorld;
     } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !mouseOverUI) {
         draggingBody = false;
         dragIndex = -1;
@@ -382,6 +382,21 @@ static void UpdateDrawFrame() {
         }
     }
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        if (patternFlicking && pendingPattern != PAT_NONE) {
+            // slingshot the whole pattern: every body gets the launch velocity
+            Vector2 pull = Vector2Subtract(patternAnchor, mouseWorld);
+            Vector2 launchVel = (Vector2Length(pull) * camera.zoom < flickDeadzone)
+                                    ? Vector2{0, 0}
+                                    : Vector2Scale(pull, flickScale);
+            for (Body b : previewBodies) {
+                b.pos = Vector2Add(b.pos, patternAnchor);
+                b.vel = Vector2Add(b.vel, launchVel);
+                bodies.push_back(b);
+            }
+            pendingPattern = PAT_NONE;
+            previewBodies.clear();
+        }
+        patternFlicking = false;
         if (flicking) {
             // slingshot: launch opposite the pull direction
             Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
@@ -675,10 +690,12 @@ static void UpdateDrawFrame() {
                        thick, WHITE);
         }
     } else if (pendingPattern != PAT_NONE && !mouseOverUI) {
-        // ghost preview of the pattern, centered on the cursor
+        // ghost preview of the pattern: follows the cursor, pinned to the
+        // anchor while a launch is being dragged out
+        Vector2 anchor = patternFlicking ? patternAnchor : mouseWorld;
         float ghostDust = fmaxf(2.4f, 2.0f / camera.zoom);
         for (const Body& b : previewBodies) {
-            Vector2 p = Vector2Add(b.pos, mouseWorld);
+            Vector2 p = Vector2Add(b.pos, anchor);
             if (IsDust(b.mass)) {
                 DrawRectangleRec({p.x - ghostDust / 2, p.y - ghostDust / 2, ghostDust, ghostDust},
                                  Fade(b.color, 0.5f));
@@ -687,7 +704,22 @@ static void UpdateDrawFrame() {
                 DrawCircleLinesV(p, MassToRadius(b.mass), Fade(WHITE, 0.25f));
             }
         }
-        DrawCircleLinesV(mouseWorld, 6.0f / camera.zoom, Fade(WHITE, 0.6f));
+        DrawCircleLinesV(anchor, 6.0f / camera.zoom, Fade(WHITE, 0.6f));
+        if (patternFlicking) {
+            Vector2 pull = Vector2Subtract(patternAnchor, mouseWorld);
+            if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
+                DrawLineEx(patternAnchor, mouseWorld, 1.5f / camera.zoom, Fade(WHITE, 0.25f));
+                Vector2 tip = Vector2Add(patternAnchor, pull);
+                float thick = 2.5f / camera.zoom;
+                DrawLineEx(patternAnchor, tip, thick, WHITE);
+                Vector2 dir = Vector2Normalize(pull);
+                float head = 12.0f / camera.zoom;
+                DrawLineEx(tip, Vector2Add(tip, Vector2Scale(Vector2Rotate(dir, 150 * DEG2RAD), head)),
+                           thick, WHITE);
+                DrawLineEx(tip, Vector2Add(tip, Vector2Scale(Vector2Rotate(dir, -150 * DEG2RAD), head)),
+                           thick, WHITE);
+            }
+        }
     } else if (!draggingBody && !mouseOverUI && pendingPattern == PAT_NONE) {
         DrawCircleLinesV(mouseWorld, MassToRadius(currentMass), Fade(WHITE, 0.5f));
     }
@@ -709,10 +741,11 @@ static void UpdateDrawFrame() {
                    {0, 0, (float)screenWidth, (float)screenHeight}, {0, 0}, 0, WHITE);
 
     // flick speed readout, in screen space next to the arrow tip
-    if (flicking) {
-        Vector2 pull = Vector2Subtract(flickAnchor, mouseWorld);
+    if (flicking || patternFlicking) {
+        Vector2 anchor = patternFlicking ? patternAnchor : flickAnchor;
+        Vector2 pull = Vector2Subtract(anchor, mouseWorld);
         if (Vector2Length(pull) * camera.zoom >= flickDeadzone) {
-            Vector2 tipScreen = GetWorldToScreen2D(Vector2Add(flickAnchor, pull), camera);
+            Vector2 tipScreen = GetWorldToScreen2D(Vector2Add(anchor, pull), camera);
             UIText(TextFormat("%.0f", Vector2Length(pull) * flickScale),
                    tipScreen.x + 10, tipScreen.y - 8, 16, UI_VALUE);
         }
@@ -872,7 +905,7 @@ static void UpdateDrawFrame() {
 
     // ---- placement banner (top-center) ----
     if (pendingPattern != PAT_NONE) {
-        const char* placeTxt = "Click to place pattern  -  ESC to cancel";
+        const char* placeTxt = "Click to place pattern  -  drag to launch  -  ESC to cancel";
         float ptw = UITextWidth(placeTxt, 20);
         Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, paused ? 58.0f : 10.0f,
                             ptw + 36.0f, 40};
