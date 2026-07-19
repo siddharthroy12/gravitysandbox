@@ -1,6 +1,10 @@
 # Gravity Sandbox
 
+[![Deploy web build](https://github.com/siddharthroy12/gravitysandbox/actions/workflows/deploy-web.yml/badge.svg)](https://github.com/siddharthroy12/gravitysandbox/actions/workflows/deploy-web.yml)
+
 An interactive Newtonian gravity simulator written in C++ with [raylib](https://github.com/raysan5/raylib).
+
+**[▶ Play it in your browser](https://siddharthroy12.github.io/gravitysandbox/)** — no install needed (built to WebAssembly on every push).
 
 ![Gravity Sandbox — a spiral galaxy with orbital trails](screenshot.png)
 
