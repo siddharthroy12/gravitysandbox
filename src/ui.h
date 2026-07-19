@@ -23,6 +23,13 @@ void UILoadFont();
 void UIInitAudio();
 void UICloseAudio();
 
+// Frosted-glass panels: each frame main renders the scene into a texture and
+// hands it here; DrawPanel samples the blurred result behind itself. Without
+// this (or if the blur shader fails) panels fall back to an opaque fill.
+void UIBackdropInit();
+void UIBackdropProcess(Texture2D scene, int logicalW, int logicalH);
+void UIBackdropUnload();
+
 void UIText(const char* text, float x, float y, float size, Color c);
 float UITextWidth(const char* text, float size);
 

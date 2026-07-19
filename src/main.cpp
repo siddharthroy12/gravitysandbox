@@ -61,6 +61,8 @@ static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHei
 
 static std::vector<Body> bodies;
 static Camera2D camera = {0};
+static RenderTexture2D sceneRT = {};                // world rendered here, then blurred for panels
+static int sceneRTW = 0, sceneRTH = 0;
 
 static float currentMass = 50.0f;
 static bool paused = false;
@@ -390,6 +392,17 @@ static void UpdateDrawFrame() {
     // devicePixelRatio even though the framebuffer is logical-sized.
     float fbScale = (float)GetRenderWidth() / (float)screenWidth;
 
+    // the world renders offscreen so the UI can blur what's behind its panels
+    if (GetRenderWidth() != sceneRTW || GetRenderHeight() != sceneRTH) {
+        if (sceneRT.id != 0) UnloadRenderTexture(sceneRT);
+        sceneRTW = GetRenderWidth();
+        sceneRTH = GetRenderHeight();
+        sceneRT = LoadRenderTexture(sceneRTW, sceneRTH);
+        SetTextureFilter(sceneRT.texture, TEXTURE_FILTER_BILINEAR);
+    }
+    BeginTextureMode(sceneRT);
+    ClearBackground(BLACK);
+
     // shader-warped spacetime grid replaces the flat grid while active
     bool curvedGrid = curvatureOn && CurvatureReady();
     if (curvedGrid) CurvatureDraw(bodies, camera, screenWidth, screenHeight, fbScale);
@@ -576,6 +589,9 @@ static void UpdateDrawFrame() {
         DrawCircleLinesV(mouseWorld, MassToRadius(currentMass), Fade(WHITE, 0.5f));
     }
     EndMode2D();
+    EndTextureMode();
+
+    UIBackdropProcess(sceneRT.texture, screenWidth, screenHeight);
 
     // Screen-space UI is authored in logical (CSS) pixels. On the web the
     // high-DPI backing buffer is larger, so give this pass the same scale as
@@ -583,6 +599,11 @@ static void UpdateDrawFrame() {
     Camera2D uiRender = {};
     uiRender.zoom = fbScale;
     BeginMode2D(uiRender);
+
+    // present the offscreen scene (negative source height: render textures
+    // store their content vertically flipped)
+    DrawTexturePro(sceneRT.texture, {0, 0, (float)sceneRTW, -(float)sceneRTH},
+                   {0, 0, (float)screenWidth, (float)screenHeight}, {0, 0}, 0, WHITE);
 
     // flick speed readout, in screen space next to the arrow tip
     if (flicking) {
@@ -788,6 +809,7 @@ int main() {
     InitSandboxAudio();
     UIInitAudio();
     CurvatureLoad();
+    UIBackdropInit();
 
     camera.offset = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
     camera.target = {0, 0};
@@ -799,6 +821,8 @@ int main() {
     while (!WindowShouldClose()) UpdateDrawFrame();
 #endif
 
+    UIBackdropUnload();
+    if (sceneRT.id != 0) UnloadRenderTexture(sceneRT);
     CurvatureUnload();
     UICloseAudio();
     CloseSandboxAudio();

@@ -2,11 +2,114 @@
 
 #include "raymath.h"
 #include <cmath>
+#include <cstring>
 
 static Font g_uiFont;
 static bool g_uiFontLoaded = false;
 static Sound g_click = {};
 static bool g_clickReady = false;
+
+// ---------- frosted-glass backdrop ----------
+
+// separable 5-tap Gaussian with linear-sampling-optimized offsets
+static const char* BLUR_FS_BODY =
+    "uniform sampler2D texture0;\n"
+    "uniform vec2 uTexel;\n"      // one texel step along the blur direction
+    "void main()\n"
+    "{\n"
+    "    vec4 sum = TEX(texture0, fragTexCoord)*0.227027;\n"
+    "    sum += TEX(texture0, fragTexCoord + uTexel*1.384615)*0.316216;\n"
+    "    sum += TEX(texture0, fragTexCoord - uTexel*1.384615)*0.316216;\n"
+    "    sum += TEX(texture0, fragTexCoord + uTexel*3.230769)*0.070270;\n"
+    "    sum += TEX(texture0, fragTexCoord - uTexel*3.230769)*0.070270;\n"
+    "    FRAG_OUT = vec4(sum.rgb, 1.0);\n"
+    "}\n";
+
+static Shader g_blurShader = {};
+static int g_blurLocTexel = -1;
+static RenderTexture2D g_blurA = {};
+static RenderTexture2D g_blurB = {};
+static int g_blurW = 0, g_blurH = 0;
+static Texture2D g_backdrop = {};
+static bool g_backdropValid = false;
+static float g_bdLogicalW = 0, g_bdLogicalH = 0;
+
+void UIBackdropInit() {
+#ifdef __EMSCRIPTEN__
+    const char* header =
+        "#version 100\n"
+        "precision mediump float;\n"
+        "varying vec2 fragTexCoord;\n"
+        "#define FRAG_OUT gl_FragColor\n"
+        "#define TEX texture2D\n";
+#else
+    const char* header =
+        "#version 330\n"
+        "in vec2 fragTexCoord;\n"
+        "out vec4 fragOut;\n"
+        "#define FRAG_OUT fragOut\n"
+        "#define TEX texture\n";
+#endif
+    char* source = (char*)MemAlloc((unsigned int)(strlen(header) + strlen(BLUR_FS_BODY) + 1));
+    strcpy(source, header);
+    strcat(source, BLUR_FS_BODY);
+    g_blurShader = LoadShaderFromMemory(NULL, source);
+    MemFree(source);
+    g_blurLocTexel = GetShaderLocation(g_blurShader, "uTexel");
+}
+
+void UIBackdropProcess(Texture2D scene, int logicalW, int logicalH) {
+    if (g_blurLocTexel == -1) return;   // shader failed to compile; keep opaque panels
+    int bw = scene.width / 4, bh = scene.height / 4;
+    if (bw < 1 || bh < 1) return;
+
+    if (bw != g_blurW || bh != g_blurH) {
+        if (g_blurA.id != 0) UnloadRenderTexture(g_blurA);
+        if (g_blurB.id != 0) UnloadRenderTexture(g_blurB);
+        g_blurA = LoadRenderTexture(bw, bh);
+        g_blurB = LoadRenderTexture(bw, bh);
+        SetTextureFilter(g_blurA.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(g_blurB.texture, TEXTURE_FILTER_BILINEAR);
+        g_blurW = bw;
+        g_blurH = bh;
+    }
+
+    // downsample to quarter res, then one Gaussian pass per axis
+    BeginTextureMode(g_blurA);
+    DrawTexturePro(scene, {0, 0, (float)scene.width, -(float)scene.height},
+                   {0, 0, (float)bw, (float)bh}, {0, 0}, 0, WHITE);
+    EndTextureMode();
+
+    float texelH[2] = {1.0f / bw, 0.0f};
+    SetShaderValue(g_blurShader, g_blurLocTexel, texelH, SHADER_UNIFORM_VEC2);
+    BeginTextureMode(g_blurB);
+    BeginShaderMode(g_blurShader);
+    DrawTexturePro(g_blurA.texture, {0, 0, (float)bw, -(float)bh},
+                   {0, 0, (float)bw, (float)bh}, {0, 0}, 0, WHITE);
+    EndShaderMode();
+    EndTextureMode();
+
+    float texelV[2] = {0.0f, 1.0f / bh};
+    SetShaderValue(g_blurShader, g_blurLocTexel, texelV, SHADER_UNIFORM_VEC2);
+    BeginTextureMode(g_blurA);
+    BeginShaderMode(g_blurShader);
+    DrawTexturePro(g_blurB.texture, {0, 0, (float)bw, -(float)bh},
+                   {0, 0, (float)bw, (float)bh}, {0, 0}, 0, WHITE);
+    EndShaderMode();
+    EndTextureMode();
+
+    g_backdrop = g_blurA.texture;
+    g_backdropValid = true;
+    g_bdLogicalW = (float)logicalW;
+    g_bdLogicalH = (float)logicalH;
+}
+
+void UIBackdropUnload() {
+    if (g_blurA.id != 0) UnloadRenderTexture(g_blurA);
+    if (g_blurB.id != 0) UnloadRenderTexture(g_blurB);
+    if (g_blurLocTexel != -1) UnloadShader(g_blurShader);
+    g_backdropValid = false;
+}
 
 void UIInitAudio() {
     if (!IsAudioDeviceReady()) return;
@@ -61,7 +164,19 @@ float UITextWidth(const char* text, float size) {
 }
 
 void DrawPanel(Rectangle r, Color border) {
-    DrawRectangleRec(r, UI_BG);
+    if (g_backdropValid) {
+        // sample the blurred scene behind the panel (source y measured from the
+        // texture bottom; negative height flips render-texture storage upright)
+        float texW = (float)g_backdrop.width, texH = (float)g_backdrop.height;
+        Rectangle src = {r.x / g_bdLogicalW * texW,
+                         (g_bdLogicalH - r.y - r.height) / g_bdLogicalH * texH,
+                         r.width / g_bdLogicalW * texW,
+                         -(r.height / g_bdLogicalH * texH)};
+        DrawTexturePro(g_backdrop, src, r, {0, 0}, 0, WHITE);
+        DrawRectangleRec(r, (Color){13, 13, 15, 170});
+    } else {
+        DrawRectangleRec(r, UI_BG);
+    }
     DrawRectangleLinesEx(r, 1, border);
 }
 
