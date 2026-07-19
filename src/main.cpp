@@ -143,6 +143,7 @@ static int pendingPattern = PAT_NONE;
 static std::vector<Body> previewBodies;             // pattern preview, positions relative to cursor
 static bool patternFlicking = false;                // dragging out a pending pattern's launch velocity
 static Vector2 patternAnchor = {0, 0};              // world pos where the pattern flick started
+static float patternMass = 0.0f;                    // mass the pending pattern preview was built with
 static bool draggingBody = false;
 static bool dragEngaged = false;                    // mouse moved past the deadzone: really dragging
 static bool draggingSlider = false;
@@ -315,6 +316,13 @@ static void UpdateDrawFrame() {
     if (IsKeyDown(KEY_UP)) currentMass *= 1.03f;
     if (IsKeyDown(KEY_DOWN)) currentMass *= 0.97f;
     currentMass = Clamp(currentMass, MASS_MIN, MASS_MAX);
+
+    // the black hole pattern is sized by the mass selection: rebuild the
+    // pending preview whenever the mass changes so the ghost stays honest
+    if (pendingPattern == PAT_BLACKHOLE && currentMass != patternMass) {
+        previewBodies = MakePattern(PAT_BLACKHOLE, {0, 0}, currentMass);
+        patternMass = currentMass;
+    }
 
     // Esc cancels pending pattern placement, an in-progress flick, or follow mode
     if (IsKeyPressed(KEY_ESCAPE)) {
@@ -765,7 +773,8 @@ static void UpdateDrawFrame() {
                 previewBodies.clear();
             } else {
                 pendingPattern = type;
-                previewBodies = MakePattern(type, {0, 0});
+                previewBodies = MakePattern(type, {0, 0}, currentMass);
+                patternMass = currentMass;
             }
         }
     };
@@ -789,7 +798,7 @@ static void UpdateDrawFrame() {
     patternButton({col2, y, colW, 32}, "Comets", PAT_COMETS, "Comets on long elliptical orbits around a star");
     y += 36;
     patternButton({px, y, pw, 32}, "Black Hole", PAT_BLACKHOLE,
-                  "A super-massive black hole with a swirling accretion disk");
+                  "A black hole with a swirling accretion disk; sized by the MASS slider");
     y += 36;
 
     UISectionHeader("VIEW", px, y, pw);

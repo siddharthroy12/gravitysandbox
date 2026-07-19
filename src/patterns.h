@@ -17,5 +17,7 @@ enum PatternType {
     PAT_BLACKHOLE
 };
 
-// Build a pattern's bodies centered on `c` (pass {0,0} for cursor-relative previews).
-std::vector<Body> MakePattern(int type, Vector2 c);
+// Build a pattern's bodies centered on `c` (pass {0,0} for cursor-relative
+// previews). `mass` scales the patterns with a user-sized centerpiece
+// (currently just the black hole); the rest ignore it.
+std::vector<Body> MakePattern(int type, Vector2 c, float mass);
