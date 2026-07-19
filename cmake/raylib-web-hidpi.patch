@@ -84,3 +84,4 @@ index b95121d..5ebb264 100644
 +        glfwSetWindowSize(platform.handle, CORE.Window.screen.width, CORE.Window.screen.height);
  
      // NOTE: Postprocessing texture is not scaled to new size
+ 
