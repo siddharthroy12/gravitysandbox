@@ -19,7 +19,7 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 - **Camera** — infinite pan (right/middle drag), zoom to cursor (wheel), reset view, jump to the barycenter of all bodies or lock onto it with follow-center, or double-click a body to follow it
 - **Time** — sim-speed slider (0.1x–10x) and single-frame stepping while paused
 - **Inspection** — toggleable per-body velocity vectors and a live gravity vector-field overlay (Lagrange regions show up as gaps)
-- **Effects** — additive glow halos on heavy stars, energy-scaled shockwave rings on impacts, and black holes with a photon ring and swirling accretion disk
+- **Effects** — additive glow halos on heavy stars, energy-scaled shockwave rings on impacts (black holes swallow without a ripple), and black holes with a photon ring and swirling accretion disk
 - **Space curvature** — a GPU fragment shader warps the grid into gravity wells around the heaviest bodies, rubber-sheet style (works on desktop GL and WebGL)
 - **Rendering** — motion trails with adjustable length, adaptive world grid, 4x MSAA, native-resolution (HiDPI) output, Inter font UI with hover tooltips on every control
 

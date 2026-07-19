@@ -372,6 +372,7 @@ static void UpdateDrawFrame() {
         PlayImpactAudio(impacts);
         SampleEnergy(stepDt);
         for (const ImpactEvent& im : impacts) {
+            if (im.isBlackHole) continue;   // black holes swallow silently: no ripple
             float maxR = Clamp(im.radius * 2.0f + sqrtf(im.energy) * 0.02f, 30.0f, 240.0f);
             shockwaves.push_back({im.pos, 0.0f, maxR, im.radius});
         }
