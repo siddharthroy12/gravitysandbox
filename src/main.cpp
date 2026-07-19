@@ -804,6 +804,11 @@ int main() {
     SetConfigFlags(flags);
     InitWindow(1280, 800, "Gravity Sandbox");
     SetWindowMinSize(800, 600);
+    Image icon = LoadImage(TextFormat("%sassets/icon.png", GetApplicationDirectory()));
+    if (icon.data) {
+        SetWindowIcon(icon);
+        UnloadImage(icon);
+    }
     SetExitKey(KEY_NULL);   // Esc cancels pattern placement instead of quitting
     UILoadFont();
     InitSandboxAudio();

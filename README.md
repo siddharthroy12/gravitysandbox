@@ -111,7 +111,7 @@ sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev \
 │   ├── physics.*     # N-body integration and collision resolution
 │   ├── patterns.*    # preset pattern generators
 │   └── ui.*          # theme, font loading, immediate-mode widgets
-├── assets/           # Inter font (SIL OFL license), copied next to the binary at build
+├── assets/           # Inter font (SIL OFL license) + app icon, copied next to the binary at build
 ├── vendor/raylib/    # raylib submodule, built statically via CMake
 ├── CMakeLists.txt
 └── run.sh            # build-and-run convenience script

@@ -40,6 +40,8 @@ jobs:
           mkdir site
           cp build-web/gravity_sandbox.js build-web/gravity_sandbox.wasm build-web/gravity_sandbox.data site/
           cp build-web/gravity_sandbox.html site/index.html
+          mkdir site/assets
+          cp build-web/assets/icon.png site/assets/
 
       - uses: actions/upload-pages-artifact@v3
         with:
