@@ -20,16 +20,7 @@ fi
 JOBS="$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
 
 if [[ "${1:-}" == "--web" ]]; then
-    if ! command -v emcmake >/dev/null; then
-        echo "Emscripten not found (emcmake/emcc). Install it first, e.g.: brew install emscripten"
-        exit 1
-    fi
-    if [[ ! -d build-web ]]; then
-        echo "==> Configuring web build..."
-        emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
-    fi
-    echo "==> Building web version..."
-    cmake --build build-web -j "$JOBS"
+    ./build-web.sh
     echo "==> Serving at http://localhost:8080/gravity_sandbox.html  (Ctrl-C to stop)"
     exec python3 -m http.server 8080 -d build-web
 fi
