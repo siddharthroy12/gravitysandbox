@@ -117,7 +117,7 @@ sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev \
 
 ## Physics notes
 
-- Forces use a Barnes-Hut quadtree (θ = 0.7, O(n log n)) above 200 bodies and brute-force pairwise summation below, both with a softening term (`SOFTENING2`) that caps close-range forces and avoids singularities. Collision pairing likewise switches to a uniform spatial grid over each body's swept path when the scene is large.
+- Forces use a Barnes-Hut quadtree (θ = 0.7, O(n log n)) above 200 bodies and brute-force pairwise summation below, both with a softening term (`SOFTENING2`) that caps close-range forces and avoids singularities. Collision pairing likewise switches to a uniform spatial grid over each body's swept path when the scene is large. The gravity field overlay samples through the same quadtree (rebuilt once per frame), so it stays cheap at any body count.
 - Integration is semi-implicit (symplectic) Euler at 2 substeps per frame, which keeps orbits stable over long runs.
 - When merging is enabled, bodies whose cores overlap combine into one, conserving mass and momentum; the merged color and radius follow the new mass.
 - The Figure-8 pattern uses the Chenciner–Montgomery three-body choreography initial conditions, rescaled from normalized units to the simulation's G and pixel scale.

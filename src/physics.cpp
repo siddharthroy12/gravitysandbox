@@ -13,20 +13,11 @@ static const size_t ACCEL_TREE_THRESHOLD = 200;
 
 namespace {
 
-struct BHNode {
-    float cx, cy, half;              // square bounds
-    float mass = 0;
-    Vector2 com = {0, 0};
-    int child[4] = {-1, -1, -1, -1};
-    int body = -1;                   // >=0: leaf with that body; -2: aggregated leaf
-    int count = 0;
-};
-
 constexpr float BH_THETA = 0.7f;
 constexpr int BH_MAX_DEPTH = 24;
 
-int NewNode(std::vector<BHNode>& nodes, float cx, float cy, float half) {
-    BHNode n;
+int NewNode(std::vector<BHField::Node>& nodes, float cx, float cy, float half) {
+    BHField::Node n;
     n.cx = cx;
     n.cy = cy;
     n.half = half;
@@ -34,29 +25,29 @@ int NewNode(std::vector<BHNode>& nodes, float cx, float cy, float half) {
     return (int)nodes.size() - 1;
 }
 
-void Insert(std::vector<BHNode>& nodes, int idx, const std::vector<Vector2>& pos,
-            const std::vector<float>& mass, int bi, int depth);
+void Insert(std::vector<BHField::Node>& nodes, int idx, const std::vector<Body>& bodies,
+            int bi, int depth);
 
-void InsertIntoChild(std::vector<BHNode>& nodes, int idx, const std::vector<Vector2>& pos,
-                     const std::vector<float>& mass, int bi, int depth) {
+void InsertIntoChild(std::vector<BHField::Node>& nodes, int idx,
+                     const std::vector<Body>& bodies, int bi, int depth) {
     // NewNode may reallocate `nodes`; only use indices across that call
     float cx = nodes[idx].cx, cy = nodes[idx].cy, half = nodes[idx].half;
-    int q = (pos[bi].x >= cx ? 1 : 0) | (pos[bi].y >= cy ? 2 : 0);
+    int q = (bodies[bi].pos.x >= cx ? 1 : 0) | (bodies[bi].pos.y >= cy ? 2 : 0);
     if (nodes[idx].child[q] == -1) {
         float h = half / 2;
         int c = NewNode(nodes, cx + ((q & 1) ? h : -h), cy + ((q & 2) ? h : -h), h);
         nodes[idx].child[q] = c;
     }
-    Insert(nodes, nodes[idx].child[q], pos, mass, bi, depth + 1);
+    Insert(nodes, nodes[idx].child[q], bodies, bi, depth + 1);
 }
 
-void Insert(std::vector<BHNode>& nodes, int idx, const std::vector<Vector2>& pos,
-            const std::vector<float>& mass, int bi, int depth) {
+void Insert(std::vector<BHField::Node>& nodes, int idx, const std::vector<Body>& bodies,
+            int bi, int depth) {
     {
-        BHNode& n = nodes[idx];
-        float tm = n.mass + mass[bi];
-        n.com.x = (n.com.x * n.mass + pos[bi].x * mass[bi]) / tm;
-        n.com.y = (n.com.y * n.mass + pos[bi].y * mass[bi]) / tm;
+        BHField::Node& n = nodes[idx];
+        float tm = n.mass + bodies[bi].mass;
+        n.com.x = (n.com.x * n.mass + bodies[bi].pos.x * bodies[bi].mass) / tm;
+        n.com.y = (n.com.y * n.mass + bodies[bi].pos.y * bodies[bi].mass) / tm;
         n.mass = tm;
         n.count++;
     }
@@ -71,19 +62,38 @@ void Insert(std::vector<BHNode>& nodes, int idx, const std::vector<Vector2>& pos
     if (nodes[idx].body >= 0) {
         int old = nodes[idx].body;
         nodes[idx].body = -1;
-        InsertIntoChild(nodes, idx, pos, mass, old, depth);
+        InsertIntoChild(nodes, idx, bodies, old, depth);
     }
-    InsertIntoChild(nodes, idx, pos, mass, bi, depth);
+    InsertIntoChild(nodes, idx, bodies, bi, depth);
 }
 
-Vector2 BHAccel(const std::vector<BHNode>& nodes, std::vector<int>& stack, Vector2 p, int self) {
+}   // namespace
+
+void BHField::Build(const std::vector<Body>& bodies) {
+    nodes.clear();
+    if (bodies.empty()) return;
+    nodes.reserve(2 * bodies.size());
+    float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
+    for (const Body& b : bodies) {
+        minX = fminf(minX, b.pos.x);
+        maxX = fmaxf(maxX, b.pos.x);
+        minY = fminf(minY, b.pos.y);
+        maxY = fmaxf(maxY, b.pos.y);
+    }
+    float half = fmaxf(maxX - minX, maxY - minY) / 2 * 1.01f + 1.0f;
+    NewNode(nodes, (minX + maxX) / 2, (minY + maxY) / 2, half);
+    for (int i = 0; i < (int)bodies.size(); i++) Insert(nodes, 0, bodies, i, 0);
+}
+
+Vector2 BHField::AccelAt(Vector2 p, int self) {
     Vector2 acc = {0, 0};
+    if (nodes.empty()) return acc;
     stack.clear();
     stack.push_back(0);
     while (!stack.empty()) {
         int idx = stack.back();
         stack.pop_back();
-        const BHNode& n = nodes[idx];
+        const Node& n = nodes[idx];
         if (n.mass <= 0) continue;
         if (n.body == self && n.count == 1) continue;   // the leaf that is exactly us
 
@@ -106,8 +116,6 @@ Vector2 BHAccel(const std::vector<BHNode>& nodes, std::vector<int>& stack, Vecto
     return acc;
 }
 
-}   // namespace
-
 Vector2 GravityFieldAt(const std::vector<Body>& bodies, Vector2 p) {
     Vector2 acc = {0, 0};
     for (const Body& b : bodies) {
@@ -129,26 +137,9 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
 
     if (n >= ACCEL_TREE_THRESHOLD) {
         // Barnes-Hut: O(n log n)
-        std::vector<Vector2> pos(n);
-        std::vector<float> mass(n);
-        float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
-        for (size_t i = 0; i < n; i++) {
-            pos[i] = bodies[i].pos;
-            mass[i] = bodies[i].mass;
-            minX = fminf(minX, pos[i].x);
-            maxX = fmaxf(maxX, pos[i].x);
-            minY = fminf(minY, pos[i].y);
-            maxY = fmaxf(maxY, pos[i].y);
-        }
-        float half = fmaxf(maxX - minX, maxY - minY) / 2 * 1.01f + 1.0f;
-        std::vector<BHNode> nodes;
-        nodes.reserve(2 * n);
-        NewNode(nodes, (minX + maxX) / 2, (minY + maxY) / 2, half);
-        for (size_t i = 0; i < n; i++) Insert(nodes, 0, pos, mass, (int)i, 0);
-
-        std::vector<int> stack;
-        stack.reserve(64);
-        for (size_t i = 0; i < n; i++) accel[i] = BHAccel(nodes, stack, pos[i], (int)i);
+        BHField field;
+        field.Build(bodies);
+        for (size_t i = 0; i < n; i++) accel[i] = field.AccelAt(bodies[i].pos, (int)i);
     } else {
         // brute force: O(n^2), slightly more accurate for small scenes
         for (size_t i = 0; i < n; i++) {

@@ -394,12 +394,15 @@ static void UpdateDrawFrame() {
 
     if (fieldOn) {
         // gravity vector field sampled on a screen-space grid; arrow length
-        // and brightness follow log-magnitude, so Lagrange regions show as gaps
+        // and brightness follow log-magnitude, so Lagrange regions show as gaps.
+        // One Barnes-Hut tree per frame keeps each sample O(log n).
+        BHField field;
+        field.Build(bodies);
         const float fieldSpacing = 48.0f;
         for (float sy = fieldSpacing / 2; sy < screenHeight; sy += fieldSpacing) {
             for (float sx = fieldSpacing / 2; sx < screenWidth; sx += fieldSpacing) {
                 Vector2 wp = GetScreenToWorld2D({sx, sy}, camera);
-                Vector2 gvec = GravityFieldAt(bodies, wp);
+                Vector2 gvec = field.AccelAt(wp);
                 float mag = Vector2Length(gvec);
                 if (mag < 1.0f) continue;
                 float t = Clamp(log10f(mag) / 4.0f, 0.0f, 1.0f);

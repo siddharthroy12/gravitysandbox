@@ -21,5 +21,29 @@ struct ImpactEvent {
 void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisionMode,
                  bool recordTrail, int trailLength, std::vector<ImpactEvent>* impacts = nullptr);
 
-// Net gravitational acceleration at a point (brute force; for field visualization).
+// Reusable Barnes-Hut quadtree over a set of bodies: build once, then query
+// gravitational acceleration at any point in O(log n). StepPhysics uses this
+// for its many-body force pass; the field overlay rebuilds one per frame.
+struct BHField {
+    struct Node {
+        float cx, cy, half;              // square bounds
+        float mass = 0;
+        Vector2 com = {0, 0};
+        int child[4] = {-1, -1, -1, -1};
+        int body = -1;                   // >=0: leaf with that body; -2: aggregated leaf
+        int count = 0;
+    };
+
+    std::vector<Node> nodes;
+
+    void Build(const std::vector<Body>& bodies);
+    // Net acceleration at p; pass a body index as `self` to skip its own pull.
+    Vector2 AccelAt(Vector2 p, int self = -1);
+
+private:
+    std::vector<int> stack;              // traversal scratch, reused across queries
+};
+
+// Net gravitational acceleration at a point (brute force; the flick
+// trajectory preview samples step-by-step, where a tree would not pay off).
 Vector2 GravityFieldAt(const std::vector<Body>& bodies, Vector2 p);
