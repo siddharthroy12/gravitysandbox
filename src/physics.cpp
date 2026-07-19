@@ -95,6 +95,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                                             Vector2Scale(dir, kick * (0.8f + GetRandomValue(0, 40) / 100.0f)));
                         d.mass = fragMass;
                         d.color = ColorForMass(fragMass);
+                        d.id = g_nextBodyId++;
                         debris.push_back(d);
                     }
                 }

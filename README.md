@@ -11,7 +11,9 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 - **N-body physics** — softened Newtonian gravity, semi-implicit Euler integration with substepping, three collision modes (pass-through, momentum-conserving merge, or merge with debris ejection)
 - **Placement** — click to drop a dot at the current mass (log-scale slider, 1–20,000), or drag and release to flick-launch it with an aimed velocity; click an existing dot to drag it around
 - **Patterns** — 10 presets placed with a mouse-follow ghost preview: Solar System, Binary Stars, Planet + Ring, Spiral Galaxy, Grid Collapse, Random Cloud, Figure-8, Moons, Collision, Comets
-- **Camera** — infinite pan (right/middle drag), zoom to cursor (wheel), reset view, jump to barycenter of all bodies
+- **Camera** — infinite pan (right/middle drag), zoom to cursor (wheel), reset view, jump to barycenter of all bodies, or double-click a body to follow it
+- **Time** — sim-speed slider (0.1x–10x) and single-frame stepping while paused
+- **Inspection** — toggleable per-body velocity vectors
 - **Rendering** — motion trails with adjustable length, adaptive world grid, 4x MSAA, native-resolution (HiDPI) output, Inter font UI
 
 ## Controls
@@ -20,12 +22,15 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 |---|---|
 | Left click | Place a dot at rest / drag an existing dot / stamp a pattern |
 | Left drag on empty space | Flick-launch a dot: pull back like a slingshot, release to fire |
+| Double-click a dot | Follow it with the camera (`Esc`, `R`, or panning stops following) |
 | Right or middle drag | Pan the camera |
 | Mouse wheel | Zoom (centered on cursor) |
 | `Space` | Pause / resume |
 | `Up` / `Down` | Adjust placement mass |
 | `T` | Toggle trails |
 | `G` | Toggle grid |
+| `V` | Toggle velocity vectors |
+| `.` | Advance one frame while paused |
 | `M` | Cycle collision mode (none / merge / debris) |
 | `R` | Reset view |
 | `H` | Center camera on all bodies |

@@ -13,7 +13,10 @@ struct Body {
     Color color;
     std::deque<Vector2> trail;
     bool alive = true;
+    int id = 0;          // stable identity; survives merges (the bigger body keeps its id)
 };
+
+inline int g_nextBodyId = 1;
 
 inline constexpr float G = 1500.0f;
 inline constexpr float SOFTENING2 = 400.0f;   // softening^2, avoids singularities at close range
@@ -33,5 +36,6 @@ inline void AddBody(std::vector<Body>& bodies, Vector2 pos, Vector2 vel, float m
     b.vel = vel;
     b.mass = mass;
     b.color = ColorForMass(mass);
+    b.id = g_nextBodyId++;
     bodies.push_back(b);
 }
