@@ -13,7 +13,8 @@ enum PatternType {
     PAT_FIGURE8,
     PAT_MOONS,
     PAT_COLLIDE,
-    PAT_COMETS
+    PAT_COMETS,
+    PAT_BLACKHOLE
 };
 
 // Build a pattern's bodies centered on `c` (pass {0,0} for cursor-relative previews).

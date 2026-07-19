@@ -13,6 +13,7 @@ struct Body {
     Color color;
     std::deque<Vector2> trail;
     bool alive = true;
+    bool isBlackHole = false;   // renders as event horizon + accretion disk
     int id = 0;          // stable identity; survives merges (the bigger body keeps its id)
 };
 

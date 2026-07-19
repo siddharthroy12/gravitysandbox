@@ -258,6 +258,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                                            Vector2Scale(small.pos, small.mass)),
                                 1.0f / totalMass);
         big.mass = totalMass;
+        big.isBlackHole = big.isBlackHole || small.isBlackHole;   // merged holes stay holes
         small.alive = false;
 
         // spray part of the smaller body back out as fragments
@@ -283,7 +284,8 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                 debris.push_back(d);
             }
         }
-        big.color = ColorForMass(big.mass);
+        if (big.isBlackHole) big.color = {255, 170, 90, 255};
+        else big.color = ColorForMass(big.mass);
 
         if (impacts) {
             float mu = m1 * m2 / totalMass;   // reduced mass

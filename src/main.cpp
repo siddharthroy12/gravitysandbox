@@ -216,9 +216,9 @@ static void UpdateDrawFrame() {
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
     camera.offset = {screenWidth / 2.0f, screenHeight / 2.0f};
-    // Panel content is 780px tall (rows below); cap the backdrop to the window.
+    // Panel content is 816px tall (rows below); cap the backdrop to the window.
     const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f,
-                             fminf(790.0f, screenHeight - 20.0f)};
+                             fminf(826.0f, screenHeight - 20.0f)};
     Vector2 mouseScreen = GetMousePosition();
     Vector2 mouseWorld = GetScreenToWorld2D(mouseScreen, camera);
     bool mouseOverUI = CheckCollisionPointRec(mouseScreen, panel) || draggingSlider ||
@@ -474,6 +474,9 @@ static void UpdateDrawFrame() {
                           (unsigned char)((b.color.b + 255) / 2), 255};
             DrawRectangleRec({b.pos.x - dustSize / 2, b.pos.y - dustSize / 2, dustSize, dustSize},
                              core);
+        } else if (b.isBlackHole) {
+            // event horizon: an opaque black disk that eats whatever is behind it
+            DrawCircleV(b.pos, MassToRadius(b.mass), BLACK);
         } else {
             DrawCircleV(b.pos, MassToRadius(b.mass), b.color);
         }
@@ -488,12 +491,33 @@ static void UpdateDrawFrame() {
                          Fade(b.color, 0.22f));
     }
     for (const Body& b : bodies) {
-        if (b.mass < 800.0f) continue;
+        if (b.mass < 800.0f || b.isBlackHole) continue;
         float r = MassToRadius(b.mass);
         float halo = r * (1.8f + std::min(b.mass / 10000.0f, 1.2f));
         DrawCircleV(b.pos, halo, Fade(b.color, 0.10f));
         DrawCircleV(b.pos, halo * 0.55f, Fade(b.color, 0.16f));
         DrawCircleV(b.pos, halo * 0.30f, Fade(b.color, 0.25f));
+    }
+    // black holes: soft outer glow, warm accretion disk with rotating hot
+    // spots, and a thin bright photon ring hugging the event horizon
+    float bhSpin = (float)(GetTime() * 110.0);   // hot-spot angular speed, deg/s
+    for (const Body& b : bodies) {
+        if (!b.isBlackHole) continue;
+        float r = MassToRadius(b.mass);
+        DrawCircleV(b.pos, r * 3.4f, Fade((Color){255, 140, 50, 255}, 0.05f));
+        // accretion disk: overlapping bands, hottest near the horizon
+        for (int k = 0; k < 7; k++) {
+            float rr = r * (1.30f + 0.26f * k);
+            float half = r * 0.15f;
+            Color dc = {255, (unsigned char)(225 - k * 18), (unsigned char)(150 - k * 18), 255};
+            DrawRing(b.pos, rr - half, rr + half, 0, 360, 64, Fade(dc, 0.20f - k * 0.024f));
+        }
+        DrawRing(b.pos, r * 1.35f, r * 1.85f, bhSpin, bhSpin + 130, 64,
+                 Fade((Color){255, 214, 130, 255}, 0.38f));
+        DrawRing(b.pos, r * 1.35f, r * 1.85f, bhSpin + 210, bhSpin + 265, 64,
+                 Fade((Color){255, 190, 95, 255}, 0.24f));
+        DrawRing(b.pos, r * 1.03f, r * 1.10f, 0, 360, 64,
+                 Fade((Color){255, 246, 222, 255}, 0.85f));
     }
     for (const Shockwave& sw : shockwaves) {
         float t = sw.age / SHOCKWAVE_LIFE;
@@ -673,6 +697,9 @@ static void UpdateDrawFrame() {
     patternButton({px, y, colW, 32}, "Collision", PAT_COLLIDE, "Two small galaxies drifting into each other");
     patternButton({col2, y, colW, 32}, "Comets", PAT_COMETS, "Comets on long elliptical orbits around a star");
     y += 36;
+    patternButton({px, y, pw, 32}, "Black Hole", PAT_BLACKHOLE,
+                  "A super-massive black hole with a swirling accretion disk");
+    y += 36;
 
     UISectionHeader("VIEW", px, y, pw);
     y += 26;
@@ -826,7 +853,7 @@ int main() {
     unsigned int flags = FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE;
     flags |= FLAG_WINDOW_HIGHDPI;
     SetConfigFlags(flags);
-    InitWindow(1280, 800, "Gravity Sandbox");
+    InitWindow(1280, 850, "Gravity Sandbox");
     SetWindowMinSize(800, 600);
     Image icon = LoadImage(TextFormat("%sassets/icon.png", GetApplicationDirectory()));
     if (icon.data) {
