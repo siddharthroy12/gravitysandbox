@@ -261,9 +261,10 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         big.isBlackHole = big.isBlackHole || small.isBlackHole;   // merged holes stay holes
         small.alive = false;
 
-        // spray part of the smaller body back out as fragments
+        // spray part of the smaller body back out as fragments; a black hole
+        // swallows everything, so no debris escapes the merge
         float debrisMass = 0.25f * std::min(m1, m2);
-        if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f) {
+        if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f && !big.isBlackHole) {
             int count = (int)Clamp(debrisMass / 3.0f, 3.0f, 8.0f);
             float fragMass = debrisMass / count;
             big.mass = totalMass - debrisMass;
