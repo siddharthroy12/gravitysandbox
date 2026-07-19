@@ -131,7 +131,7 @@ Vector2 GravityFieldAt(const std::vector<Body>& bodies, Vector2 p) {
 // ---------- integration + collisions ----------
 
 void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisionMode,
-                 bool recordTrail, int trailLength, std::vector<ImpactEvent>* impacts) {
+                 bool tidalDestruction, bool recordTrail, int trailLength, std::vector<ImpactEvent>* impacts) {
     size_t n = bodies.size();
     std::vector<Vector2> accel(n, {0, 0});
 
@@ -173,8 +173,9 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
     // A small body can be pulled apart before physical contact when it enters
     // the tidal region of a much heavier body. Keep this small-scene only: the
     // collision grid deliberately avoids all-pairs work for crowded scenes.
+    // Toggleable at runtime (tidalDestruction).
     std::vector<Body> debris;
-    if (n < ACCEL_TREE_THRESHOLD) {
+    if (tidalDestruction && n < ACCEL_TREE_THRESHOLD) {
         for (size_t i = 0; i < n; i++) {
             for (size_t j = i + 1; j < n; j++) {
                 if (!bodies[i].alive || !bodies[j].alive) continue;

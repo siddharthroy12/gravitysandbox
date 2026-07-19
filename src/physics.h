@@ -18,8 +18,10 @@ struct ImpactEvent {
 // Advance the simulation. Uses a Barnes-Hut quadtree for forces and a uniform
 // grid for collision pairs once the body count is large. If `impacts` is
 // non-null, one event is appended per merge (for visual effects).
+// `tidalDestruction` toggles the Roche-like pull-apart of small bodies
+// passing deep into a heavy body's gravity.
 void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisionMode,
-                 bool recordTrail, int trailLength, std::vector<ImpactEvent>* impacts = nullptr);
+                 bool tidalDestruction, bool recordTrail, int trailLength, std::vector<ImpactEvent>* impacts = nullptr);
 
 // Reusable Barnes-Hut quadtree over a set of bodies: build once, then query
 // gravitational acceleration at any point in O(log n). StepPhysics uses this

@@ -69,6 +69,7 @@ static bool paused = false;
 static bool trailsOn = true;
 static bool gridOn = true;
 static int collisionMode = COLLIDE_MERGE;
+static bool tidalDestruction = true;                // Roche-like pull-apart near heavy bodies
 static float trailTimer = 0.0f;
 static const float trailInterval = 1.0f / 60.0f;   // trail sample rate, independent of FPS
 static float trailLength = 240.0f;                  // in samples; /60 = seconds
@@ -318,6 +319,7 @@ static void UpdateDrawFrame() {
     if (IsKeyPressed(KEY_G)) gridOn = !gridOn;
     if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
     if (IsKeyPressed(KEY_M)) collisionMode = (collisionMode + 1) % 3;
+    if (IsKeyPressed(KEY_D)) tidalDestruction = !tidalDestruction;
     if (IsKeyPressed(KEY_V)) vectorsOn = !vectorsOn;
     if (IsKeyPressed(KEY_B)) fieldOn = !fieldOn;
     if (IsKeyPressed(KEY_W)) curvatureOn = !curvatureOn;
@@ -354,7 +356,7 @@ static void UpdateDrawFrame() {
         std::vector<ImpactEvent> impacts;
         const int substeps = 2;
         for (int s = 0; s < substeps; s++) {
-            StepPhysics(bodies, stepDt / substeps, trailsOn, collisionMode,
+            StepPhysics(bodies, stepDt / substeps, trailsOn, collisionMode, tidalDestruction,
                         recordTrail && s == substeps - 1, (int)trailLength, &impacts);
         }
         PlayImpactAudio(impacts);
@@ -689,6 +691,10 @@ static void UpdateDrawFrame() {
     if (UIToggle({px + 2 * (w3 + 8), y, w3, 32}, "Debris", collisionMode == COLLIDE_DEBRIS,
                  "Merge, spraying part of the smaller dot out as fragments"))
         collisionMode = COLLIDE_DEBRIS;
+    y += 36;
+    if (UIToggle({px, y, pw, 32}, "Tidal Destruction (D)", tidalDestruction,
+                 "Heavy dots pull small dots apart on close passes"))
+        tidalDestruction = !tidalDestruction;
     y += 36;
 
     const char* trailTxt = TextFormat("%.1fs", trailLength / 60.0f);
