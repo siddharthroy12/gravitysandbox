@@ -1,0 +1,86 @@
+diff --git a/src/platforms/rcore_web.c b/src/platforms/rcore_web.c
+index b95121d..5ebb264 100644
+--- a/src/platforms/rcore_web.c
++++ b/src/platforms/rcore_web.c
+@@ -1727,7 +1727,20 @@ static EM_BOOL EmscriptenKeyboardCallback(int eventType, const EmscriptenKeyboar
+ // Emscripten: Called on mouse input events
+ static EM_BOOL EmscriptenMouseCallback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData)
+ {
+-    // This is only for registering mouse click events with emscripten and doesn't need to do anything
++    // targetX/Y are CSS pixels. Convert them to raylib's logical screen size
++    // instead of accepting GLFW's framebuffer-scaled coordinates on HiDPI.
++    if (!CORE.Input.Mouse.cursorLocked)
++    {
++        double canvasWidth = 0.0;
++        double canvasHeight = 0.0;
++        emscripten_get_element_css_size(platform.canvasId, &canvasWidth, &canvasHeight);
++        if ((canvasWidth > 0.0) && (canvasHeight > 0.0))
++        {
++            CORE.Input.Mouse.currentPosition.x = mouseEvent->targetX*((float)GetScreenWidth()/(float)canvasWidth);
++            CORE.Input.Mouse.currentPosition.y = mouseEvent->targetY*((float)GetScreenHeight()/(float)canvasHeight);
++            CORE.Input.Touch.position[0] = CORE.Input.Mouse.currentPosition;
++        }
++    }
+ 
+     return 1; // The event was consumed by the callback handler
+ }
+@@ -1741,6 +1754,21 @@ static EM_BOOL EmscriptenMouseMoveCallback(int eventType, const EmscriptenMouseE
+         CORE.Input.Mouse.previousPosition.x = CORE.Input.Mouse.lockedPosition.x - mouseEvent->movementX;
+         CORE.Input.Mouse.previousPosition.y = CORE.Input.Mouse.lockedPosition.y - mouseEvent->movementY;
+     }
++    else
++    {
++        // The canvas backing buffer can be devicePixelRatio times larger than
++        // its CSS box. Keep pointer coordinates in the same CSS-pixel space as
++        // GetScreenWidth()/GetScreenHeight(), matching touch input below.
++        double canvasWidth = 0.0;
++        double canvasHeight = 0.0;
++        emscripten_get_element_css_size(platform.canvasId, &canvasWidth, &canvasHeight);
++        if ((canvasWidth > 0.0) && (canvasHeight > 0.0))
++        {
++            CORE.Input.Mouse.currentPosition.x = mouseEvent->targetX*((float)GetScreenWidth()/(float)canvasWidth);
++            CORE.Input.Mouse.currentPosition.y = mouseEvent->targetY*((float)GetScreenHeight()/(float)canvasWidth);
++            CORE.Input.Touch.position[0] = CORE.Input.Mouse.currentPosition;
++        }
++    }
+ 
+     return 1; // The event was consumed by the callback handler
+ }
+@@ -1902,12 +1930,22 @@ static EM_BOOL EmscriptenResizeCallback(int eventType, const EmscriptenUiEvent *
+     if (height < (int)CORE.Window.screenMin.height) height = CORE.Window.screenMin.height;
+     else if ((height > (int)CORE.Window.screenMax.height) && (CORE.Window.screenMax.height > 0)) height = CORE.Window.screenMax.height;
+ 
+-    emscripten_set_canvas_element_size(platform.canvasId, width, height);
++    // The browser measures the window in CSS pixels, but a high-DPI canvas
++    // needs a larger backing buffer to avoid interpolation blur. Keep raylib's
++    // screen size in CSS pixels so pointer input remains correctly scaled.
++    float dpiScale = 1.0f;
++    if (FLAG_IS_SET(CORE.Window.flags, FLAG_WINDOW_HIGHDPI)) dpiScale = GetWindowScaleDPI().x;
++    int renderWidth = (int)roundf(width*dpiScale);
++    int renderHeight = (int)roundf(height*dpiScale);
+ 
+-    SetupViewport(width, height); // Reset viewport and projection matrix for new size
++    emscripten_set_canvas_element_size(platform.canvasId, renderWidth, renderHeight);
+ 
+-    CORE.Window.currentFbo.width = width;
+-    CORE.Window.currentFbo.height = height;
++    SetupViewport(renderWidth, renderHeight); // Reset viewport and projection matrix for new size
++
++    CORE.Window.render.width = renderWidth;
++    CORE.Window.render.height = renderHeight;
++    CORE.Window.currentFbo.width = renderWidth;
++    CORE.Window.currentFbo.height = renderHeight;
+     CORE.Window.resizedLastFrame = true;
+ 
+     if (IsWindowFullscreen()) return 1;
+@@ -1916,7 +1954,10 @@ static EM_BOOL EmscriptenResizeCallback(int eventType, const EmscriptenUiEvent *
+     CORE.Window.screen.width = width;
+     CORE.Window.screen.height = height;
+ 
+-    glfwSetWindowSize(platform.handle, CORE.Window.screen.width, CORE.Window.screen.height);
++    // glfwSetWindowSize() would resize Emscripten's canvas back to CSS-pixel
++    // dimensions, undoing the high-DPI backing buffer above.
++    if (!FLAG_IS_SET(CORE.Window.flags, FLAG_WINDOW_HIGHDPI))
++        glfwSetWindowSize(platform.handle, CORE.Window.screen.width, CORE.Window.screen.height);
+ 
+     // NOTE: Postprocessing texture is not scaled to new size
