@@ -94,6 +94,7 @@ static std::vector<Shockwave> shockwaves;
 static float simSpeed = 1.0f;                       // time multiplier, 0.1x - 10x
 static bool draggingSpeedSlider = false;
 static int followId = -1;                           // body id the camera is locked onto
+static bool followCenter = false;                   // camera tracks the barycenter of all bodies
 static double lastClickTime = 0;
 static int lastClickBodyId = -1;
 static std::vector<float> energyHistory;
@@ -215,7 +216,9 @@ static void UpdateDrawFrame() {
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
     camera.offset = {screenWidth / 2.0f, screenHeight / 2.0f};
-    const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f, 754.0f};
+    // Panel content is 780px tall (rows below); cap the backdrop to the window.
+    const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f,
+                             fminf(790.0f, screenHeight - 20.0f)};
     Vector2 mouseScreen = GetMousePosition();
     Vector2 mouseWorld = GetScreenToWorld2D(mouseScreen, camera);
     bool mouseOverUI = CheckCollisionPointRec(mouseScreen, panel) || draggingSlider ||
@@ -224,7 +227,7 @@ static void UpdateDrawFrame() {
     // pan with right or middle mouse drag (manual pan breaks follow mode)
     if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
         Vector2 delta = GetMouseDelta();
-        if (delta.x != 0 || delta.y != 0) followId = -1;
+        if (delta.x != 0 || delta.y != 0) { followId = -1; followCenter = false; }
         delta = Vector2Scale(delta, -1.0f / camera.zoom);
         camera.target = Vector2Add(camera.target, delta);
     }
@@ -250,6 +253,7 @@ static void UpdateDrawFrame() {
         previewBodies.clear();
         flicking = false;
         followId = -1;
+        followCenter = false;
     }
 
     // left click: place pending pattern, grab existing body, or place a new dot
@@ -270,6 +274,7 @@ static void UpdateDrawFrame() {
                 double now = GetTime();
                 if (now - lastClickTime < 0.35 && lastClickBodyId == bodies[i].id) {
                     followId = bodies[i].id;   // double-click: follow instead of drag
+                    followCenter = false;
                 } else {
                     draggingBody = true;
                     dragIndex = i;
@@ -335,10 +340,15 @@ static void UpdateDrawFrame() {
         camera.target = Vector2Scale(com, 1.0f / totalMass);
     };
     if (IsKeyPressed(KEY_H)) centerOnBodies();
+    if (IsKeyPressed(KEY_J)) {
+        followCenter = !followCenter;
+        if (followCenter) followId = -1;
+    }
     if (IsKeyPressed(KEY_R)) {
         camera.target = {0, 0};
         camera.zoom = 1.0f;
         followId = -1;
+        followCenter = false;
     }
 
     // sim time: scaled by simSpeed; '.' advances one frame while paused
@@ -371,7 +381,8 @@ static void UpdateDrawFrame() {
                          shockwaves.end());
     }
 
-    // follow mode: keep the camera locked on the followed body
+    // follow mode: keep the camera locked on the followed body / mass center
+    if (followCenter) centerOnBodies();
     if (followId != -1) {
         bool found = false;
         for (const Body& b : bodies) {
@@ -717,14 +728,20 @@ static void UpdateDrawFrame() {
         camera.target = {0, 0};
         camera.zoom = 1.0f;
         followId = -1;
+        followCenter = false;
     }
     y += 36;
-    if (UIButton({px, y, pw, 32}, "Center Bodies (H)",
+    if (UIButton({px, y, halfW, 32}, "Center (H)",
                  "Move the camera to the mass center of all dots")) centerOnBodies();
+    if (UIToggle({px + halfW + 8, y, halfW, 32}, "Follow (J)", followCenter,
+                 "Keep the camera locked on the mass center of all dots")) {
+        followCenter = !followCenter;
+        if (followCenter) followId = -1;
+    }
     y += 36;
     if (UIButton({px, y, pw, 32}, "Fullscreen (F)", "Toggle borderless fullscreen"))
         ToggleBorderlessWindowed();
-    y += 44;
+    y += 36;
     if (UIButton({px, y, pw, 32}, "Clear Canvas (C)", "Remove every dot from the scene")) {
         bodies.clear();
         energyHistory.clear();
@@ -779,11 +796,12 @@ static void UpdateDrawFrame() {
     }
 
     // ---- following banner (top-center, stacks under the others) ----
-    if (followId != -1) {
+    if (followId != -1 || followCenter) {
         float fy = 10.0f;
         if (paused) fy += 48;
         if (pendingPattern != PAT_NONE) fy += 48;
-        const char* followTxt = "FOLLOWING  -  ESC to stop";
+        const char* followTxt = followCenter ? "FOLLOWING CENTER  -  ESC to stop"
+                                             : "FOLLOWING  -  ESC to stop";
         float ftw = UITextWidth(followTxt, 20);
         Rectangle banner = {(screenWidth - ftw) / 2.0f - 18, fy, ftw + 36.0f, 40};
         DrawPanel(banner, UI_BORDER_LIT);
