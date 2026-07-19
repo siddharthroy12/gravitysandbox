@@ -275,6 +275,5 @@ float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* draggi
     float kh = (hover || *dragging) ? 20.0f : 18.0f;
     Rectangle knob = {kx - kh / 2, cy - kh / 2, kh, kh};
     DrawRectangleRec(knob, WHITE);
-    DrawRectangleLinesEx(knob, 1, (Color){120, 120, 126, 255});
     return value;
 }
