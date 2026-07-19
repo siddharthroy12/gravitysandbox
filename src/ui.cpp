@@ -65,14 +65,42 @@ void DrawPanel(Rectangle r, Color border) {
     DrawRectangleLinesEx(r, 1, border);
 }
 
+// ---------- tooltips ----------
+
+static const char* g_tooltip = nullptr;
+static Vector2 g_tooltipPos = {0, 0};
+
+void UITooltip(const char* text) {
+    // suppress while any button is held: no tooltip mid-drag or mid-flick
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonDown(MOUSE_BUTTON_RIGHT) ||
+        IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) return;
+    g_tooltip = text;
+    g_tooltipPos = GetMousePosition();
+}
+
+void UIDrawTooltip() {
+    if (!g_tooltip) return;
+    const float size = 15.0f, pad = 8.0f;
+    float tw = UITextWidth(g_tooltip, size);
+    Rectangle box = {g_tooltipPos.x + 14, g_tooltipPos.y + 18, tw + pad * 2, size + pad * 2};
+    // keep the box on screen; flip above the cursor if it would clip the bottom
+    if (box.x + box.width > GetScreenWidth() - 4) box.x = GetScreenWidth() - 4 - box.width;
+    if (box.y + box.height > GetScreenHeight() - 4) box.y = g_tooltipPos.y - box.height - 6;
+    DrawRectangleRec(box, UI_BG);
+    DrawRectangleLinesEx(box, 1, UI_BORDER_LIT);
+    UIText(g_tooltip, box.x + pad, box.y + pad, size, UI_TEXT);
+    g_tooltip = nullptr;
+}
+
 void UISectionHeader(const char* label, float x, float y, float width) {
     (void)width;
     UIText(label, x, y, 18, UI_LABEL);
 }
 
-bool UIButton(Rectangle r, const char* label) {
+bool UIButton(Rectangle r, const char* label, const char* tip) {
     Vector2 m = GetMousePosition();
     bool hover = CheckCollisionPointRec(m, r);
+    if (hover && tip) UITooltip(tip);
     Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
     if (hover && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) bg = UI_BTN_PRESS;
     DrawRectangleRec(r, bg);
@@ -85,9 +113,10 @@ bool UIButton(Rectangle r, const char* label) {
     return clicked;
 }
 
-bool UIToggle(Rectangle r, const char* label, bool state) {
+bool UIToggle(Rectangle r, const char* label, bool state, const char* tip) {
     Vector2 m = GetMousePosition();
     bool hover = CheckCollisionPointRec(m, r);
+    if (hover && tip) UITooltip(tip);
     if (state) {
         // filled: white block with dark text, like a primary button
         Color bg = hover ? (Color){215, 215, 218, 255} : (Color){235, 235, 238, 255};
@@ -108,9 +137,11 @@ bool UIToggle(Rectangle r, const char* label, bool state) {
     return clicked;
 }
 
-float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* dragging) {
+float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* dragging,
+                  const char* tip) {
     Vector2 m = GetMousePosition();
     bool hover = CheckCollisionPointRec(m, r);
+    if (hover && tip) UITooltip(tip);
     if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) *dragging = true;
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) *dragging = false;
 

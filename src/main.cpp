@@ -569,14 +569,15 @@ static void UpdateDrawFrame() {
     UISectionHeader("MASS", px, y, pw - UITextWidth(massTxt, 18) - 10);
     UIText(massTxt, panel.x + panel.width - 14 - UITextWidth(massTxt, 18), y, 18, UI_VALUE);
     y += 26;
-    currentMass = UISliderLog({px, y, pw, 24}, currentMass, MASS_MIN, MASS_MAX, &draggingSlider);
+    currentMass = UISliderLog({px, y, pw, 24}, currentMass, MASS_MIN, MASS_MAX, &draggingSlider,
+                              "Mass of newly placed dots (log scale; Up/Down keys work too)");
     y += 34;
 
     UISectionHeader("PATTERNS", px, y, pw);
     y += 26;
 
-    auto patternButton = [&](Rectangle r, const char* label, int type) {
-        if (UIToggle(r, label, pendingPattern == type)) {
+    auto patternButton = [&](Rectangle r, const char* label, int type, const char* tip) {
+        if (UIToggle(r, label, pendingPattern == type, tip)) {
             if (pendingPattern == type) {
                 pendingPattern = PAT_NONE;
                 previewBodies.clear();
@@ -588,39 +589,46 @@ static void UpdateDrawFrame() {
     };
     float colW = (pw - 8) / 2;
     float col2 = px + colW + 8;
-    patternButton({px, y, colW, 32}, "Solar Sys", PAT_SOLAR);
-    patternButton({col2, y, colW, 32}, "Binary", PAT_BINARY);
+    patternButton({px, y, colW, 32}, "Solar Sys", PAT_SOLAR, "A star with six orbiting planets");
+    patternButton({col2, y, colW, 32}, "Binary", PAT_BINARY, "Two stars orbiting their shared center");
     y += 36;
-    patternButton({px, y, colW, 32}, "Ring", PAT_RING);
-    patternButton({col2, y, colW, 32}, "Galaxy", PAT_GALAXY);
+    patternButton({px, y, colW, 32}, "Ring", PAT_RING, "A star with a ring of small bodies");
+    patternButton({col2, y, colW, 32}, "Galaxy", PAT_GALAXY, "A spiral galaxy of 400 orbiting dots");
     y += 36;
-    patternButton({px, y, colW, 32}, "Grid", PAT_GRID);
-    patternButton({col2, y, colW, 32}, "Cloud", PAT_CLOUD);
+    patternButton({px, y, colW, 32}, "Grid", PAT_GRID, "A grid of dots at rest that collapses into clumps");
+    patternButton({col2, y, colW, 32}, "Cloud", PAT_CLOUD, "A random cloud at rest that collapses into clumps");
     y += 36;
-    patternButton({px, y, colW, 32}, "Figure-8", PAT_FIGURE8);
-    patternButton({col2, y, colW, 32}, "Moons", PAT_MOONS);
+    patternButton({px, y, colW, 32}, "Figure-8", PAT_FIGURE8, "Three equal bodies in a stable figure-8 orbit");
+    patternButton({col2, y, colW, 32}, "Moons", PAT_MOONS, "A star with two planets, each with its own moon");
     y += 36;
-    patternButton({px, y, colW, 32}, "Collision", PAT_COLLIDE);
-    patternButton({col2, y, colW, 32}, "Comets", PAT_COMETS);
+    patternButton({px, y, colW, 32}, "Collision", PAT_COLLIDE, "Two small galaxies drifting into each other");
+    patternButton({col2, y, colW, 32}, "Comets", PAT_COMETS, "Comets on long elliptical orbits around a star");
     y += 36;
 
     UISectionHeader("VIEW", px, y, pw);
     y += 26;
     float halfW = (pw - 8) / 2;
-    if (UIToggle({px, y, halfW, 32}, "Trails (T)", trailsOn)) trailsOn = !trailsOn;
-    if (UIToggle({px + halfW + 8, y, halfW, 32}, "Grid (G)", gridOn)) gridOn = !gridOn;
+    if (UIToggle({px, y, halfW, 32}, "Trails (T)", trailsOn, "Fading orbit trails behind each dot"))
+        trailsOn = !trailsOn;
+    if (UIToggle({px + halfW + 8, y, halfW, 32}, "Grid (G)", gridOn,
+                 "Reference grid and origin axes")) gridOn = !gridOn;
     y += 36;
-    if (UIToggle({px, y, halfW, 32}, "Vectors (V)", vectorsOn)) vectorsOn = !vectorsOn;
-    if (UIToggle({px + halfW + 8, y, halfW, 32}, "Field (B)", fieldOn)) fieldOn = !fieldOn;
+    if (UIToggle({px, y, halfW, 32}, "Vectors (V)", vectorsOn, "Velocity arrow on each dot"))
+        vectorsOn = !vectorsOn;
+    if (UIToggle({px + halfW + 8, y, halfW, 32}, "Field (B)", fieldOn,
+                 "Gravity field arrows; gaps mark Lagrange regions")) fieldOn = !fieldOn;
     y += 36;
     UISectionHeader("COLLISION (M)", px, y, pw);
     y += 26;
     float w3 = (pw - 16) / 3;
-    if (UIToggle({px, y, w3, 32}, "None", collisionMode == COLLIDE_NONE))
+    if (UIToggle({px, y, w3, 32}, "None", collisionMode == COLLIDE_NONE,
+                 "Dots pass through each other"))
         collisionMode = COLLIDE_NONE;
-    if (UIToggle({px + w3 + 8, y, w3, 32}, "Merge", collisionMode == COLLIDE_MERGE))
+    if (UIToggle({px + w3 + 8, y, w3, 32}, "Merge", collisionMode == COLLIDE_MERGE,
+                 "Colliding dots combine, conserving mass and momentum"))
         collisionMode = COLLIDE_MERGE;
-    if (UIToggle({px + 2 * (w3 + 8), y, w3, 32}, "Debris", collisionMode == COLLIDE_DEBRIS))
+    if (UIToggle({px + 2 * (w3 + 8), y, w3, 32}, "Debris", collisionMode == COLLIDE_DEBRIS,
+                 "Merge, spraying part of the smaller dot out as fragments"))
         collisionMode = COLLIDE_DEBRIS;
     y += 36;
 
@@ -629,27 +637,30 @@ static void UpdateDrawFrame() {
     UIText(trailTxt, panel.x + panel.width - 14 - UITextWidth(trailTxt, 18), y, 18, UI_VALUE);
     y += 26;
     trailLength = UISliderLog({px, y, pw, 24}, trailLength, TRAIL_LEN_MIN, TRAIL_LEN_MAX,
-                               &draggingTrailSlider);
+                               &draggingTrailSlider, "How long trails persist, in seconds");
     y += 34;
 
     const char* speedTxt = TextFormat("%.1fx", simSpeed);
     UISectionHeader("TIME", px, y, pw - UITextWidth(speedTxt, 18) - 10);
     UIText(speedTxt, panel.x + panel.width - 14 - UITextWidth(speedTxt, 18), y, 18, UI_VALUE);
     y += 26;
-    simSpeed = UISliderLog({px, y, pw, 24}, simSpeed, 0.1f, 10.0f, &draggingSpeedSlider);
+    simSpeed = UISliderLog({px, y, pw, 24}, simSpeed, 0.1f, 10.0f, &draggingSpeedSlider,
+                           "Simulation speed multiplier");
     y += 34;
 
-    if (UIButton({px, y, pw, 32}, "Reset View (R)")) {
+    if (UIButton({px, y, pw, 32}, "Reset View (R)", "Return the camera to the origin")) {
         camera.target = {0, 0};
         camera.zoom = 1.0f;
         followId = -1;
     }
     y += 36;
-    if (UIButton({px, y, pw, 32}, "Center Bodies (H)")) centerOnBodies();
+    if (UIButton({px, y, pw, 32}, "Center Bodies (H)",
+                 "Move the camera to the mass center of all dots")) centerOnBodies();
     y += 36;
-    if (UIButton({px, y, pw, 32}, "Fullscreen (F)")) ToggleBorderlessWindowed();
+    if (UIButton({px, y, pw, 32}, "Fullscreen (F)", "Toggle borderless fullscreen"))
+        ToggleBorderlessWindowed();
     y += 44;
-    if (UIButton({px, y, pw, 32}, "Clear Canvas (C)")) {
+    if (UIButton({px, y, pw, 32}, "Clear Canvas (C)", "Remove every dot from the scene")) {
         bodies.clear();
         energyHistory.clear();
         energySampleTimer = 0.0f;
@@ -665,6 +676,15 @@ static void UpdateDrawFrame() {
     const char* bodyTxt = TextFormat("%d", (int)bodies.size());
     UIText(bodyTxt, info.x + info.width - 14 - UITextWidth(bodyTxt, 18), info.y + 39, 18, UI_VALUE);
     UIText("TOTAL ENERGY", info.x + 14, info.y + 65, 14, UI_LABEL);
+    // "i in a circle" icon: hover explains the energy readout
+    Vector2 energyIcon = {info.x + 14 + UITextWidth("TOTAL ENERGY", 14) + 15, info.y + 72};
+    bool energyHover = CheckCollisionPointCircle(mouseScreen, energyIcon, 9.0f);
+    Color energyIconCol = energyHover ? UI_VALUE : UI_LABEL;
+    DrawCircleLinesV(energyIcon, 7.0f, energyIconCol);
+    float iw = UITextWidth("i", 12);
+    UIText("i", energyIcon.x - iw / 2, energyIcon.y - 6, 12, energyIconCol);
+    if (energyHover)
+        UITooltip("Kinetic + potential energy of the whole system, graphed over time below");
     if (!energyHistory.empty()) {
         float first = energyHistory.front();
         float change = (fabsf(first) > 1.0f) ? (energyHistory.back() - first) / fabsf(first) * 100.0f : 0.0f;
@@ -711,6 +731,9 @@ static void UpdateDrawFrame() {
     Rectangle hintBar = {10, screenHeight - 44.0f, htw + 28.0f, 34};
     DrawPanel(hintBar, UI_BORDER);
     UIText(hints, hintBar.x + 14, hintBar.y + 9, 16, UI_LABEL);
+
+    // tooltips registered by hovered widgets this frame, drawn on top of all UI
+    UIDrawTooltip();
 
     EndMode2D();
     EndDrawing();

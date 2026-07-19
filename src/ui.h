@@ -26,8 +26,14 @@ void UICloseAudio();
 void UIText(const char* text, float x, float y, float size, Color c);
 float UITextWidth(const char* text, float size);
 
+// Register a tooltip for this frame (widgets call it when hovered). It is
+// drawn by UIDrawTooltip at the end of the UI pass, on top of everything.
+void UITooltip(const char* text);
+void UIDrawTooltip();
+
 void DrawPanel(Rectangle r, Color border);
 void UISectionHeader(const char* label, float x, float y, float width);
-bool UIButton(Rectangle r, const char* label);
-bool UIToggle(Rectangle r, const char* label, bool state);
-float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* dragging);
+bool UIButton(Rectangle r, const char* label, const char* tip = nullptr);
+bool UIToggle(Rectangle r, const char* label, bool state, const char* tip = nullptr);
+float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* dragging,
+                  const char* tip = nullptr);

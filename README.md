@@ -19,7 +19,7 @@ Place dots of any mass on an infinite canvas and watch them attract, orbit, slin
 - **Time** — sim-speed slider (0.1x–10x) and single-frame stepping while paused
 - **Inspection** — toggleable per-body velocity vectors and a live gravity vector-field overlay (Lagrange regions show up as gaps)
 - **Effects** — additive glow halos on heavy stars and energy-scaled shockwave rings on impacts
-- **Rendering** — motion trails with adjustable length, adaptive world grid, 4x MSAA, native-resolution (HiDPI) output, Inter font UI
+- **Rendering** — motion trails with adjustable length, adaptive world grid, 4x MSAA, native-resolution (HiDPI) output, Inter font UI with hover tooltips on every control
 
 ## Controls
 
