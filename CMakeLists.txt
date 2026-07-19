@@ -20,6 +20,14 @@ if(APPLE)
     target_link_libraries(gravity_sandbox PRIVATE "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
 endif()
 
+if(EMSCRIPTEN)
+    set_target_properties(gravity_sandbox PROPERTIES SUFFIX ".html")
+    target_link_options(gravity_sandbox PRIVATE
+        "-sUSE_GLFW=3"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "--preload-file" "${CMAKE_SOURCE_DIR}/assets@assets")
+endif()
+
 add_custom_command(TARGET gravity_sandbox POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:gravity_sandbox>/assets)

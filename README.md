@@ -67,6 +67,19 @@ cd gravitysandbox
 ./run.sh --clean   # wipe the build directory and rebuild from scratch
 ```
 
+### Web build (Emscripten)
+
+With [Emscripten](https://emscripten.org) installed (`brew install emscripten` on macOS):
+
+```sh
+./run.sh --web
+```
+
+This compiles to WebAssembly into `build-web/` and serves the result at
+`http://localhost:8080/gravity_sandbox.html`. The font is bundled into the
+page's virtual filesystem automatically. To deploy, copy
+`gravity_sandbox.{html,js,wasm,data}` from `build-web/` to any static host.
+
 ### Manual build
 
 ```sh
