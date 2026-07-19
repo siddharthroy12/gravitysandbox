@@ -5,6 +5,39 @@
 
 static Font g_uiFont;
 static bool g_uiFontLoaded = false;
+static Sound g_click = {};
+static bool g_clickReady = false;
+
+void UIInitAudio() {
+    if (!IsAudioDeviceReady()) return;
+    // short soft tick: descending sine with a sharp decay, built in memory
+    constexpr int sampleRate = 22050;
+    const unsigned int frames = (unsigned int)(0.045f * sampleRate);
+    auto* samples = (short*)MemAlloc(frames * sizeof(short));
+    for (unsigned int i = 0; i < frames; i++) {
+        float t = (float)i / frames;
+        float hz = 1250.0f - 550.0f * t;
+        float env = (1.0f - t) * (1.0f - t) * (1.0f - t);
+        float wave = sinf(2.0f * PI * hz * ((float)i / sampleRate));
+        samples[i] = (short)(Clamp(wave * env * 0.3f, -1.0f, 1.0f) * 32767.0f);
+    }
+    Wave wave = {frames, sampleRate, 16, 1, samples};
+    g_click = LoadSoundFromWave(wave);
+    UnloadWave(wave);
+    g_clickReady = true;
+}
+
+void UICloseAudio() {
+    if (!g_clickReady) return;
+    UnloadSound(g_click);
+    g_clickReady = false;
+}
+
+static void PlayClick(float pitch) {
+    if (!g_clickReady) return;
+    SetSoundPitch(g_click, pitch);
+    PlaySound(g_click);
+}
 
 void UILoadFont() {
     // atlas sized ~2x the largest UI text size so glyphs sample near 1:1 on retina
@@ -47,7 +80,9 @@ bool UIButton(Rectangle r, const char* label) {
     float tw = UITextWidth(label, 18);
     UIText(label, r.x + (r.width - tw) / 2, r.y + (r.height - 18) / 2, 18,
            hover ? UI_VALUE : UI_TEXT);
-    return hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+    bool clicked = hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+    if (clicked) PlayClick(1.0f);
+    return clicked;
 }
 
 bool UIToggle(Rectangle r, const char* label, bool state) {
@@ -67,7 +102,10 @@ bool UIToggle(Rectangle r, const char* label, bool state) {
         float tw = UITextWidth(label, 18);
         UIText(label, r.x + (r.width - tw) / 2, r.y + (r.height - 18) / 2, 18, UI_LABEL);
     }
-    return hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+    bool clicked = hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+    // turning on ticks slightly higher than turning off
+    if (clicked) PlayClick(state ? 0.9f : 1.12f);
+    return clicked;
 }
 
 float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* dragging) {

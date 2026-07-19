@@ -691,6 +691,7 @@ int main() {
     SetExitKey(KEY_NULL);   // Esc cancels pattern placement instead of quitting
     UILoadFont();
     InitSandboxAudio();
+    UIInitAudio();
 
     camera.offset = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
     camera.target = {0, 0};
@@ -702,6 +703,7 @@ int main() {
     while (!WindowShouldClose()) UpdateDrawFrame();
 #endif
 
+    UICloseAudio();
     CloseSandboxAudio();
     CloseWindow();
     return 0;

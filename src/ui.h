@@ -18,6 +18,11 @@ inline constexpr Color UI_BTN_PRESS = {55, 55, 61, 255};
 // raylib's default font if the asset is missing.
 void UILoadFont();
 
+// Build the widget click sound (call once, after the audio device is up).
+// Widgets stay silent if this was never called or the device isn't ready.
+void UIInitAudio();
+void UICloseAudio();
+
 void UIText(const char* text, float x, float y, float size, Color c);
 float UITextWidth(const char* text, float size);
 
