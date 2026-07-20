@@ -286,11 +286,16 @@ static void UpdateDrawFrame() {
     camera.offset = {screenWidth / 2.0f, screenHeight / 2.0f};
     // Panel content is 816px tall (rows below); cap the backdrop to the window.
     const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f,
-                             fminf(826.0f, screenHeight - 20.0f)};
+                             fminf(520.0f, screenHeight - 20.0f)};
+    const Rectangle leftPanel = {10.0f, 10.0f, 252.0f, 362.0f};
+    const float infoW = 480.0f;
+    const Rectangle infoPanel = {screenWidth - infoW - 10.0f, screenHeight - 44.0f, infoW, 34.0f};
     Vector2 mouseScreen = GetMousePosition();
     Vector2 mouseWorld = GetScreenToWorld2D(mouseScreen, camera);
-    bool mouseOverUI = CheckCollisionPointRec(mouseScreen, panel) || draggingSlider ||
-                       draggingTrailSlider || draggingSpeedSlider;
+    bool mouseOverUI = CheckCollisionPointRec(mouseScreen, panel) ||
+                       CheckCollisionPointRec(mouseScreen, leftPanel) ||
+                       CheckCollisionPointRec(mouseScreen, infoPanel) ||
+                       draggingSlider || draggingTrailSlider || draggingSpeedSlider;
 
     // pan with right or middle mouse drag (manual pan breaks follow mode)
     if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
@@ -712,22 +717,22 @@ static void UpdateDrawFrame() {
         }
     }
 
-    // ---- UI panel ----
-    DrawPanel(panel, UI_BORDER);
+    // ---- Left UI panel (Mass and Patterns) ----
+    DrawPanel(leftPanel, UI_BORDER);
 
-    float px = panel.x + 14, pw = panel.width - 28;
-    float y = panel.y + 12;
+    float lpx = leftPanel.x + 14, lpw = leftPanel.width - 28;
+    float ly = leftPanel.y + 12;
 
     const char* massTxt = TextFormat("%.0f", currentMass);
-    UISectionHeader("MASS", px, y, pw - UITextWidth(massTxt, 18) - 10);
-    UIText(massTxt, panel.x + panel.width - 14 - UITextWidth(massTxt, 18), y, 18, UI_VALUE);
-    y += 26;
-    currentMass = UISliderLog({px, y, pw, 24}, currentMass, MASS_MIN, MASS_MAX, &draggingSlider,
+    UISectionHeader("MASS", lpx, ly, lpw - UITextWidth(massTxt, 18) - 10);
+    UIText(massTxt, leftPanel.x + leftPanel.width - 14 - UITextWidth(massTxt, 18), ly, 18, UI_VALUE);
+    ly += 26;
+    currentMass = UISliderLog({lpx, ly, lpw, 24}, currentMass, MASS_MIN, MASS_MAX, &draggingSlider,
                               "Mass of newly placed dots (log scale; Up/Down keys work too)");
-    y += 34;
+    ly += 34;
 
-    UISectionHeader("PATTERNS", px, y, pw);
-    y += 26;
+    UISectionHeader("PATTERNS", lpx, ly, lpw);
+    ly += 26;
 
     auto patternButton = [&](Rectangle r, const char* label, int type, const char* tip) {
         // one pattern is always armed, so clicking the active one is a no-op
@@ -737,30 +742,35 @@ static void UpdateDrawFrame() {
             patternMass = currentMass;
         }
     };
-    float colW = (pw - 8) / 2;
-    float col2 = px + colW + 8;
-    patternButton({px, y, colW, 32}, "Solar Sys", PAT_SOLAR, "A star with six orbiting planets");
-    patternButton({col2, y, colW, 32}, "Binary", PAT_BINARY, "Two stars orbiting their shared center");
-    y += 36;
-    patternButton({px, y, colW, 32}, "Ring", PAT_RING, "A star with a ring of small bodies");
-    patternButton({col2, y, colW, 32}, "Galaxy", PAT_GALAXY,
+    float colW = (lpw - 8) / 2;
+    float col2 = lpx + colW + 8;
+    patternButton({lpx, ly, colW, 32}, "Solar Sys", PAT_SOLAR, "A star with six orbiting planets");
+    patternButton({col2, ly, colW, 32}, "Binary", PAT_BINARY, "Two stars orbiting their shared center");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Ring", PAT_RING, "A star with a ring of small bodies");
+    patternButton({col2, ly, colW, 32}, "Galaxy", PAT_GALAXY,
                   "A spiral galaxy orbiting a central black hole");
-    y += 36;
-    patternButton({px, y, colW, 32}, "Grid", PAT_GRID, "A grid of dots at rest that collapses into clumps");
-    patternButton({col2, y, colW, 32}, "Cloud", PAT_CLOUD, "A random cloud at rest that collapses into clumps");
-    y += 36;
-    patternButton({px, y, colW, 32}, "Figure-8", PAT_FIGURE8, "Three equal bodies in a stable figure-8 orbit");
-    patternButton({col2, y, colW, 32}, "Moons", PAT_MOONS, "A star with two planets, each with its own moon");
-    y += 36;
-    patternButton({px, y, colW, 32}, "Collision", PAT_COLLIDE,
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Grid", PAT_GRID, "A grid of dots at rest that collapses into clumps");
+    patternButton({col2, ly, colW, 32}, "Cloud", PAT_CLOUD, "A random cloud at rest that collapses into clumps");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Figure-8", PAT_FIGURE8, "Three equal bodies in a stable figure-8 orbit");
+    patternButton({col2, ly, colW, 32}, "Moons", PAT_MOONS, "A star with two planets, each with its own moon");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Collision", PAT_COLLIDE,
                   "Two galaxies with black hole cores drifting into each other");
-    patternButton({col2, y, colW, 32}, "Comets", PAT_COMETS, "Comets on long elliptical orbits around a star");
-    y += 36;
-    patternButton({px, y, colW, 32}, "Planet", PAT_PLANET,
+    patternButton({col2, ly, colW, 32}, "Comets", PAT_COMETS, "Comets on long elliptical orbits around a star");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Planet", PAT_PLANET,
                   "A single planet sized by the MASS slider");
-    patternButton({col2, y, colW, 32}, "Black Hole", PAT_BLACKHOLE,
+    patternButton({col2, ly, colW, 32}, "Black Hole", PAT_BLACKHOLE,
                   "A black hole with a swirling accretion disk; sized by the MASS slider");
-    y += 36;
+
+    // ---- Right UI panel ----
+    DrawPanel(panel, UI_BORDER);
+
+    float px = panel.x + 14, pw = panel.width - 28;
+    float y = panel.y + 12;
 
     UISectionHeader("VIEW", px, y, pw);
     y += 26;
@@ -836,33 +846,61 @@ static void UpdateDrawFrame() {
         energySampleTimer = 0.0f;
     }
 
-    // ---- info card (top-left) ----
-    Rectangle info = {10, 10, 210, 128};
-    DrawPanel(info, UI_BORDER);
-    UIText("FPS", info.x + 14, info.y + 13, 18, UI_LABEL);
-    const char* fpsTxt = TextFormat("%d", GetFPS());
-    UIText(fpsTxt, info.x + info.width - 14 - UITextWidth(fpsTxt, 18), info.y + 13, 18, UI_VALUE);
-    UIText("Bodies", info.x + 14, info.y + 39, 18, UI_LABEL);
-    const char* bodyTxt = TextFormat("%d", (int)bodies.size());
-    UIText(bodyTxt, info.x + info.width - 14 - UITextWidth(bodyTxt, 18), info.y + 39, 18, UI_VALUE);
-    UIText("TOTAL ENERGY", info.x + 14, info.y + 65, 14, UI_LABEL);
-    // "i in a circle" icon: hover explains the energy readout
-    Vector2 energyIcon = {info.x + 14 + UITextWidth("TOTAL ENERGY", 14) + 15, info.y + 72};
-    bool energyHover = CheckCollisionPointCircle(mouseScreen, energyIcon, 9.0f);
-    Color energyIconCol = energyHover ? UI_VALUE : UI_LABEL;
-    DrawCircleLinesV(energyIcon, 7.0f, energyIconCol);
-    float iw = UITextWidth("i", 12);
-    UIText("i", energyIcon.x - iw / 2, energyIcon.y - 6, 12, energyIconCol);
-    if (energyHover)
-        UITooltip("Kinetic + potential energy of the whole system, graphed over time below");
+    // ---- info panel (bottom-right, single line) ----
+    DrawPanel(infoPanel, UI_BORDER);
+
+    float cy = infoPanel.y + 9;
+
+    const float columnGap = 22.0f;
+    // Reserve worst-case width for each value so columns hold still as digit
+    // counts change, instead of reflowing every frame.
+    static const float fpsReserve = UITextWidth("9999", 15);
+    static const float bodiesReserve = UITextWidth("99999", 15);
+    static const float energyReserve = UITextWidth("+999.99%", 15);
+
+    // FPS (column starts at infoPanel.x + 14)
+    float fpsX = infoPanel.x + 14;
+    UIText("FPS", fpsX, cy, 15, UI_LABEL);
+    float fpsValueX = fpsX + UITextWidth("FPS", 15) + 6;
+    UIText(TextFormat("%d", GetFPS()), fpsValueX, cy, 15, UI_VALUE);
+
+    // Bodies (starts a fixed distance after the FPS value's reserved slot)
+    float bodiesX = fpsValueX + fpsReserve + columnGap;
+    UIText("BODIES", bodiesX, cy, 15, UI_LABEL);
+    float bodiesValueX = bodiesX + UITextWidth("BODIES", 15) + 6;
+    UIText(TextFormat("%d", (int)bodies.size()), bodiesValueX, cy, 15, UI_VALUE);
+
+    // Total Energy (starts a fixed distance after the Bodies value's reserved slot)
+    float energyX = bodiesValueX + bodiesReserve + columnGap;
+    UIText("ENERGY", energyX, cy, 15, UI_LABEL);
+    const char* deltaTxt = "0.00%";
+    Color energyCol = UI_VALUE;
     if (!energyHistory.empty()) {
         float first = energyHistory.front();
         float change = (fabsf(first) > 1.0f) ? (energyHistory.back() - first) / fabsf(first) * 100.0f : 0.0f;
-        const char* deltaTxt = TextFormat("%+.2f%%", change);
-        UIText(deltaTxt, info.x + info.width - 14 - UITextWidth(deltaTxt, 14), info.y + 65, 14,
-               fabsf(change) < 0.2f ? CLITERAL(Color){100, 210, 255, 255} : UI_VALUE);
+        deltaTxt = TextFormat("%+.2f%%", change);
+        if (fabsf(change) < 0.2f) {
+            energyCol = CLITERAL(Color){100, 210, 255, 255};
+        }
     }
-    DrawEnergyGraph({info.x + 14, info.y + 84, info.width - 28, 30});
+    float energyValueX = energyX + UITextWidth("ENERGY", 15) + 6;
+    UIText(deltaTxt, energyValueX, cy, 15, energyCol);
+
+    // Energy tooltip on hover
+    float energyLabelW = UITextWidth("ENERGY", 15) + 6 + energyReserve;
+    Rectangle energyRect = {energyX, infoPanel.y, energyLabelW + 10, infoPanel.height};
+    if (CheckCollisionPointRec(mouseScreen, energyRect)) {
+        UITooltip("Kinetic + potential energy of the whole system");
+    }
+
+    // Energy Graph (starts a fixed distance after the Energy value's reserved slot)
+    float graphX = energyValueX + energyReserve + columnGap;
+    float graphW = (infoPanel.x + infoPanel.width - 14) - graphX;
+    float graphH = 20.0f;
+    float graphY = infoPanel.y + (infoPanel.height - graphH) / 2.0f;
+    if (graphW > 10.0f) {
+        DrawEnergyGraph({graphX, graphY, graphW, graphH});
+    }
 
     // ---- paused banner (top-center) ----
     if (paused) {
