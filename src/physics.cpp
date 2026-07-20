@@ -181,6 +181,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                 if (!bodies[i].alive || !bodies[j].alive) continue;
                 Body& heavy = (bodies[i].mass >= bodies[j].mass) ? bodies[i] : bodies[j];
                 Body& small = (bodies[i].mass >= bodies[j].mass) ? bodies[j] : bodies[i];
+                if (small.isBlackHole) continue;   // black holes are never torn apart
                 float massRatio = heavy.mass / small.mass;
                 if (heavy.mass < 800.0f || massRatio < 12.0f) continue;
 
@@ -246,8 +247,12 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
 
         float m1 = bodies[i].mass, m2 = bodies[j].mass;
         float totalMass = m1 + m2;
-        Body& big = (m1 >= m2) ? bodies[i] : bodies[j];
-        Body& small = (m1 >= m2) ? bodies[j] : bodies[i];
+        // a black hole always wins: it absorbs the other body regardless of mass
+        bool iIsBig = (bodies[i].isBlackHole == bodies[j].isBlackHole)
+                          ? (m1 >= m2)
+                          : bodies[i].isBlackHole;
+        Body& big = iIsBig ? bodies[i] : bodies[j];
+        Body& small = iIsBig ? bodies[j] : bodies[i];
         float impactSpeed = Vector2Length(Vector2Subtract(big.vel, small.vel));
         // impact axis: from the bigger body toward the smaller one, captured
         // before the merge moves big.pos to the barycenter
