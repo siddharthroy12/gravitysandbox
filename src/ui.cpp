@@ -173,7 +173,7 @@ void DrawPanel(Rectangle r, Color border) {
                          r.width / g_bdLogicalW * texW,
                          -(r.height / g_bdLogicalH * texH)};
         DrawTexturePro(g_backdrop, src, r, {0, 0}, 0, WHITE);
-        DrawRectangleRec(r, (Color){13, 13, 15, 170});
+        DrawRectangleRec(r, CLITERAL(Color){13, 13, 15, 170});
     } else {
         DrawRectangleRec(r, UI_BG);
     }
@@ -234,11 +234,11 @@ bool UIToggle(Rectangle r, const char* label, bool state, const char* tip) {
     if (hover && tip) UITooltip(tip);
     if (state) {
         // filled: white block with dark text, like a primary button
-        Color bg = hover ? (Color){215, 215, 218, 255} : (Color){235, 235, 238, 255};
+        Color bg = hover ? CLITERAL(Color){215, 215, 218, 255} : CLITERAL(Color){235, 235, 238, 255};
         DrawRectangleRec(r, bg);
         float tw = UITextWidth(label, 18);
         UIText(label, r.x + (r.width - tw) / 2, r.y + (r.height - 18) / 2, 18,
-               (Color){18, 18, 20, 255});
+               CLITERAL(Color){18, 18, 20, 255});
     } else {
         Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
         DrawRectangleRec(r, bg);
@@ -269,8 +269,8 @@ float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* draggi
 
     float cy = r.y + r.height / 2;
     float kx = r.x + r.width * t;
-    DrawRectangleRec({r.x, cy - 2, r.width, 4}, (Color){55, 55, 60, 255});
-    DrawRectangleRec({r.x, cy - 2, kx - r.x, 4}, (Color){235, 235, 238, 255});
+    DrawRectangleRec({r.x, cy - 2, r.width, 4}, CLITERAL(Color){55, 55, 60, 255});
+    DrawRectangleRec({r.x, cy - 2, kx - r.x, 4}, CLITERAL(Color){235, 235, 238, 255});
     // square knob
     float kh = (hover || *dragging) ? 20.0f : 18.0f;
     Rectangle knob = {kx - kh / 2, cy - kh / 2, kh, kh};

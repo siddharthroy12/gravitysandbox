@@ -275,7 +275,7 @@ static void DrawEnergyGraph(Rectangle area) {
         float x1 = area.x + area.width * (float)i / (ENERGY_HISTORY_LENGTH - 1);
         float y0 = area.y + area.height * (1.0f - (energyHistory[i - 1] - low) / span);
         float y1 = area.y + area.height * (1.0f - (energyHistory[i] - low) / span);
-        DrawLineEx({x0, y0}, {x1, y1}, 1.5f, (Color){100, 210, 255, 255});
+        DrawLineEx({x0, y0}, {x1, y1}, 1.5f, CLITERAL(Color){100, 210, 255, 255});
     }
 }
 
@@ -530,7 +530,7 @@ static void UpdateDrawFrame() {
                 float len = (6.0f + 14.0f * t) / camera.zoom;
                 Vector2 dir = Vector2Scale(gvec, 1.0f / mag);
                 Vector2 tip = Vector2Add(wp, Vector2Scale(dir, len));
-                Color fc = Fade((Color){140, 180, 255, 255}, 0.12f + 0.5f * t);
+                Color fc = Fade(CLITERAL(Color){140, 180, 255, 255}, 0.12f + 0.5f * t);
                 float thick = 1.2f / camera.zoom;
                 DrawLineEx(wp, tip, thick, fc);
                 float head = 4.0f / camera.zoom;
@@ -598,7 +598,7 @@ static void UpdateDrawFrame() {
                  Fade(warm, (1.0f - t) * 0.55f));
         if (t < 0.25f) {
             DrawCircleV(sw.pos, sw.baseR * (1.0f + t * 2.0f),
-                        Fade((Color){255, 240, 200, 255}, (0.25f - t) * 2.2f));
+                        Fade(CLITERAL(Color){255, 240, 200, 255}, (0.25f - t) * 2.2f));
         }
     }
     EndBlendMode();
@@ -860,7 +860,7 @@ static void UpdateDrawFrame() {
         float change = (fabsf(first) > 1.0f) ? (energyHistory.back() - first) / fabsf(first) * 100.0f : 0.0f;
         const char* deltaTxt = TextFormat("%+.2f%%", change);
         UIText(deltaTxt, info.x + info.width - 14 - UITextWidth(deltaTxt, 14), info.y + 65, 14,
-               fabsf(change) < 0.2f ? (Color){100, 210, 255, 255} : UI_VALUE);
+               fabsf(change) < 0.2f ? CLITERAL(Color){100, 210, 255, 255} : UI_VALUE);
     }
     DrawEnergyGraph({info.x + 14, info.y + 84, info.width - 28, 30});
 
