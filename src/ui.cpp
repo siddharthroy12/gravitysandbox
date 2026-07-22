@@ -1,6 +1,7 @@
 #include "ui.h"
 
 #include "raymath.h"
+#include "rlgl.h"
 #include <cmath>
 #include <cstring>
 
@@ -8,6 +9,35 @@ static Font g_uiFont;
 static bool g_uiFontLoaded = false;
 static Sound g_click = {};
 static bool g_clickReady = false;
+
+// A render texture with only a color attachment, no depth buffer. These are
+// pure 2D compositing scratch targets (downsample + blur passes), so the
+// depth renderbuffer LoadRenderTexture always attaches is both unused and,
+// on some WebGL setups, a source of framebuffer-incomplete failures that
+// raylib doesn't surface as an error (see the matching helper in main.cpp).
+static RenderTexture2D LoadRenderTextureNoDepth(int width, int height) {
+    RenderTexture2D target = {0};
+    target.id = rlLoadFramebuffer();
+    if (target.id > 0) {
+        rlEnableFramebuffer(target.id);
+        target.texture.id = rlLoadTexture(NULL, width, height, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+        target.texture.width = width;
+        target.texture.height = height;
+        target.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+        target.texture.mipmaps = 1;
+        rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0,
+                            RL_ATTACHMENT_TEXTURE2D, 0);
+        if (rlFramebufferComplete(target.id)) {
+            TraceLog(LOG_INFO, "FBO: [ID %i] Framebuffer object created successfully (no depth)",
+                     target.id);
+        } else {
+            TraceLog(LOG_WARNING, "FBO: [ID %i] Framebuffer incomplete even without depth",
+                     target.id);
+        }
+        rlDisableFramebuffer();
+    }
+    return target;
+}
 
 // ---------- frosted-glass backdrop ----------
 
@@ -63,15 +93,22 @@ void UIBackdropProcess(Texture2D scene, int logicalW, int logicalH) {
     int bw = scene.width / 4, bh = scene.height / 4;
     if (bw < 1 || bh < 1) return;
 
-    if (bw != g_blurW || bh != g_blurH) {
+    if (bw != g_blurW || bh != g_blurH || g_blurA.id == 0 || g_blurB.id == 0) {
         if (g_blurA.id != 0) UnloadRenderTexture(g_blurA);
         if (g_blurB.id != 0) UnloadRenderTexture(g_blurB);
-        g_blurA = LoadRenderTexture(bw, bh);
-        g_blurB = LoadRenderTexture(bw, bh);
-        SetTextureFilter(g_blurA.texture, TEXTURE_FILTER_BILINEAR);
-        SetTextureFilter(g_blurB.texture, TEXTURE_FILTER_BILINEAR);
-        g_blurW = bw;
-        g_blurH = bh;
+        g_blurA = LoadRenderTextureNoDepth(bw, bh);
+        g_blurB = LoadRenderTextureNoDepth(bw, bh);
+        if (g_blurA.id != 0 && g_blurB.id != 0) {
+            SetTextureFilter(g_blurA.texture, TEXTURE_FILTER_BILINEAR);
+            SetTextureFilter(g_blurB.texture, TEXTURE_FILTER_BILINEAR);
+            g_blurW = bw;
+            g_blurH = bh;
+        } else {
+            // creation failed; keep g_blurW/H stale so this block retries
+            // next frame instead of leaving a half-invalid pair in place
+            g_blurW = -1;
+            g_blurH = -1;
+        }
     }
 
     // downsample to quarter res, then one Gaussian pass per axis

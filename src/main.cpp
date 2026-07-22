@@ -1,5 +1,6 @@
 #include "raylib.h"
 #include "raymath.h"
+#include "rlgl.h"
 
 #include "body.h"
 #include "curvature.h"
@@ -241,6 +242,39 @@ static void DrawNeutronStarFX(Vector2 p, float r, float time) {
 
     DrawCircleV(p, coreR, WHITE);
     DrawCircleV(p, coreR * 1.8f, Fade(glow, 0.6f));
+}
+
+// A render texture with only a color attachment, no depth buffer. Everything
+// this app draws is flat 2D, so the depth renderbuffer LoadRenderTexture
+// always attaches is dead weight - and on some WebGL setups (reported on
+// Firefox) that attachment silently fails, leaving an FBO that looks valid
+// (nonzero ids) but never actually renders, so the whole scene comes out
+// black until something else (e.g. toggling fullscreen) forces a recreate.
+// Skipping the depth attachment removes that failure mode entirely.
+static RenderTexture2D LoadRenderTextureNoDepth(int width, int height) {
+    RenderTexture2D target = {0};
+    target.id = rlLoadFramebuffer();
+    if (target.id > 0) {
+        rlEnableFramebuffer(target.id);
+        target.texture.id = rlLoadTexture(NULL, width, height, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+        target.texture.width = width;
+        target.texture.height = height;
+        target.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+        target.texture.mipmaps = 1;
+        rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0,
+                            RL_ATTACHMENT_TEXTURE2D, 0);
+        if (rlFramebufferComplete(target.id)) {
+            TraceLog(LOG_INFO, "FBO: [ID %i] Framebuffer object created successfully (no depth)",
+                     target.id);
+        } else {
+            TraceLog(LOG_WARNING, "FBO: [ID %i] Framebuffer incomplete even without depth",
+                     target.id);
+        }
+        rlDisableFramebuffer();
+    } else {
+        TraceLog(LOG_WARNING, "FBO: Framebuffer object can not be created");
+    }
+    return target;
 }
 
 // ---------- app state (file scope so the web main-loop callback can reach it) ----------
@@ -675,12 +709,21 @@ static void UpdateDrawFrame() {
     float fbScale = (float)GetRenderWidth() / (float)screenWidth;
 
     // the world renders offscreen so the UI can blur what's behind its panels
-    if (GetRenderWidth() != sceneRTW || GetRenderHeight() != sceneRTH) {
+    if (GetRenderWidth() != sceneRTW || GetRenderHeight() != sceneRTH || sceneRT.id == 0) {
         if (sceneRT.id != 0) UnloadRenderTexture(sceneRT);
-        sceneRTW = GetRenderWidth();
-        sceneRTH = GetRenderHeight();
-        sceneRT = LoadRenderTexture(sceneRTW, sceneRTH);
-        SetTextureFilter(sceneRT.texture, TEXTURE_FILTER_BILINEAR);
+        int newW = GetRenderWidth(), newH = GetRenderHeight();
+        sceneRT = LoadRenderTextureNoDepth(newW, newH);
+        if (sceneRT.id != 0) {
+            SetTextureFilter(sceneRT.texture, TEXTURE_FILTER_BILINEAR);
+            sceneRTW = newW;
+            sceneRTH = newH;
+        } else {
+            // creation failed (e.g. GL context not fully ready yet on some
+            // browsers); leave sceneRTW/H at their old values so the size
+            // check above stays true and we retry again next frame
+            sceneRTW = -1;
+            sceneRTH = -1;
+        }
     }
     BeginTextureMode(sceneRT);
     ClearBackground(BLACK);
