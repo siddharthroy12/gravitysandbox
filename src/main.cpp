@@ -185,6 +185,43 @@ static void DrawHoleFX(Vector2 p, float r, float time, const HolePalette& pal) {
     EndBlendMode();
 }
 
+// ---------- neutron star rendering ----------
+
+// A pulsar-style lighthouse beam: a tapered wedge fading with distance, swept
+// by `angle`. Two are drawn 180 degrees apart, spinning far faster than any
+// orbit in the sim, which is the whole visual joke of a neutron star.
+static void DrawPulsarBeam(Vector2 c, float angle, float len, Color col) {
+    float half = 4.0f * DEG2RAD;   // narrow cone
+    Vector2 dir = {cosf(angle), sinf(angle)};
+    Vector2 perpNear = {-sinf(angle) * 1.5f, cosf(angle) * 1.5f};
+    Vector2 tipL = Vector2Add(c, Vector2Scale({cosf(angle + half), sinf(angle + half)}, len));
+    Vector2 tipR = Vector2Add(c, Vector2Scale({cosf(angle - half), sinf(angle - half)}, len));
+    Vector2 baseL = Vector2Add(c, perpNear);
+    Vector2 baseR = Vector2Subtract(c, perpNear);
+    DrawTriangle(baseL, tipL, tipR, Fade(col, 0.5f));
+    DrawTriangle(baseL, tipR, baseR, Fade(col, 0.5f));
+}
+
+static void DrawNeutronStarFX(Vector2 p, float r, float time) {
+    // the core stays tiny (barely larger than a dust point) no matter how
+    // heavy the star is, which is the point: absurd density, absurd mass
+    float coreR = fmaxf(2.2f, r * 0.14f);
+    float beamLen = r * 9.0f;
+    float spinSpeed = 520.0f;   // degrees/sec; pulsars really do spin this fast
+    float angle = DEG2RAD * time * spinSpeed;
+    Color glow = NEUTRONSTAR_COLOR;
+
+    BeginBlendMode(BLEND_ADDITIVE);
+    DrawCircleV(p, r * 2.2f, Fade(glow, 0.06f));
+    DrawCircleV(p, r * 1.1f, Fade(glow, 0.12f));
+    DrawPulsarBeam(p, angle, beamLen, glow);
+    DrawPulsarBeam(p, angle + PI, beamLen, glow);
+    EndBlendMode();
+
+    DrawCircleV(p, coreR, WHITE);
+    DrawCircleV(p, coreR * 1.8f, Fade(glow, 0.6f));
+}
+
 // ---------- app state (file scope so the web main-loop callback can reach it) ----------
 
 static std::vector<Body> bodies;
@@ -395,7 +432,7 @@ static void UpdateDrawFrame() {
     // the single-body patterns are sized by the mass selection: rebuild the
     // pending preview whenever the mass changes so the ghost stays honest
     if ((pendingPattern == PAT_PLANET || pendingPattern == PAT_BLACKHOLE ||
-         pendingPattern == PAT_WHITEHOLE) &&
+         pendingPattern == PAT_WHITEHOLE || pendingPattern == PAT_NEUTRONSTAR) &&
         currentMass != patternMass) {
         previewBodies = MakePattern(pendingPattern, {0, 0}, currentMass);
         patternMass = currentMass;
@@ -640,9 +677,10 @@ static void UpdateDrawFrame() {
     bool dustTrails = bodies.size() < 500;   // in dense scenes dust reads better without trails
     float dustSize = fmaxf(2.4f, 2.0f / camera.zoom);   // never shrinks below ~2 screen px
     for (auto& b : bodies) {
-        // holes are never dust: tiny ones still render as horizon + disk,
-        // and the bright dust quad must not bleed through the event horizon
-        bool dust = IsDust(b.mass) && !b.isBlackHole && !b.isWhiteHole;
+        // holes and neutron stars are never dust: tiny ones still render as
+        // horizon + disk (or core + beam), and the bright dust quad must not
+        // bleed through them
+        bool dust = IsDust(b.mass) && !b.isBlackHole && !b.isWhiteHole && !b.isNeutronStar;
         if (trailsOn && (dustTrails || !dust) && (int)b.trail.size() > trailStride) {
             float trailWidth = std::max(2.0f, MassToRadius(b.mass) * 0.35f);
             for (size_t k = trailStride; k < b.trail.size(); k += trailStride) {
@@ -658,29 +696,32 @@ static void UpdateDrawFrame() {
                           (unsigned char)((b.color.b + 255) / 2), 255};
             DrawRectangleRec({b.pos.x - dustSize / 2, b.pos.y - dustSize / 2, dustSize, dustSize},
                              core);
-        } else if (!b.isBlackHole && !b.isWhiteHole) {
+        } else if (!b.isBlackHole && !b.isWhiteHole && !b.isNeutronStar) {
             DrawCircleV(b.pos, MassToRadius(b.mass), b.color);
         }
-        // black and white holes render in their own layered pass below
+        // black holes, white holes, and neutron stars render in their own
+        // layered pass below
     }
 
-    // holes: far disk behind the horizon, photon ring + near disk over it
+    // holes: far disk behind the horizon, photon ring + near disk over it;
+    // neutron stars: tiny core with a spinning pulsar beam
     float bhTime = (float)GetTime();
     for (const Body& b : bodies) {
         if (b.isBlackHole) DrawHoleFX(b.pos, MassToRadius(b.mass), bhTime, BH_PALETTE);
         else if (b.isWhiteHole) DrawHoleFX(b.pos, MassToRadius(b.mass), bhTime, WH_PALETTE);
+        else if (b.isNeutronStar) DrawNeutronStarFX(b.pos, MassToRadius(b.mass), bhTime);
     }
 
     // additive pass: dust glow, hot halos on heavy bodies, then impact shockwaves
     BeginBlendMode(BLEND_ADDITIVE);
     float dustGlow = dustSize * 2.6f;
     for (const Body& b : bodies) {
-        if (!IsDust(b.mass) || b.isBlackHole || b.isWhiteHole) continue;
+        if (!IsDust(b.mass) || b.isBlackHole || b.isWhiteHole || b.isNeutronStar) continue;
         DrawRectangleRec({b.pos.x - dustGlow / 2, b.pos.y - dustGlow / 2, dustGlow, dustGlow},
                          Fade(b.color, 0.22f));
     }
     for (const Body& b : bodies) {
-        if (b.mass < 800.0f || b.isBlackHole || b.isWhiteHole) continue;
+        if (b.mass < 800.0f || b.isBlackHole || b.isWhiteHole || b.isNeutronStar) continue;
         float r = MassToRadius(b.mass);
         float halo = r * (1.8f + std::min(b.mass / 10000.0f, 1.2f));
         DrawCircleV(b.pos, halo, Fade(b.color, 0.10f));
@@ -897,6 +938,9 @@ static void UpdateDrawFrame() {
                   "A black hole with a swirling accretion disk; sized by the MASS slider");
     patternButton({col2, ly, colW, 32}, "White Hole", PAT_WHITEHOLE,
                   "A white hole that repels matter and can't be entered; sized by the MASS slider");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Neutron Star", PAT_NEUTRONSTAR,
+                  "A tiny, ultra-dense star with a sweeping pulsar beam; sized by the MASS slider");
     }   // end left panel
 
     // ---- Right UI panel ----

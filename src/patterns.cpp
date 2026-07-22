@@ -366,6 +366,13 @@ static void SpawnWhiteHole(std::vector<Body>& bodies, Vector2 c, float mass) {
     wh.color = WHITEHOLE_COLOR;
 }
 
+static void SpawnNeutronStar(std::vector<Body>& bodies, Vector2 c, float mass) {
+    AddBody(bodies, c, {0, 0}, mass);
+    Body& ns = bodies.back();
+    ns.isNeutronStar = true;
+    ns.color = NEUTRONSTAR_COLOR;
+}
+
 std::vector<Body> MakePattern(int type, Vector2 c, float mass) {
     std::vector<Body> v;
     switch (type) {
@@ -393,6 +400,7 @@ std::vector<Body> MakePattern(int type, Vector2 c, float mass) {
         case PAT_BLACKHOLE: SpawnBlackHole(v, c, mass); break;
         case PAT_PLANET: SpawnPlanet(v, c, mass); break;
         case PAT_WHITEHOLE: SpawnWhiteHole(v, c, mass); break;
+        case PAT_NEUTRONSTAR: SpawnNeutronStar(v, c, mass); break;
     }
     return v;
 }

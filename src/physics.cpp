@@ -192,7 +192,9 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                 if (!bodies[i].alive || !bodies[j].alive) continue;
                 Body& heavy = (bodies[i].mass >= bodies[j].mass) ? bodies[i] : bodies[j];
                 Body& small = (bodies[i].mass >= bodies[j].mass) ? bodies[j] : bodies[i];
-                if (small.isBlackHole || small.isWhiteHole) continue;   // holes are never torn apart
+                // holes are never torn apart; neither is a neutron star - it's
+                // already about as dense as matter gets
+                if (small.isBlackHole || small.isWhiteHole || small.isNeutronStar) continue;
                 if (heavy.isWhiteHole) continue;   // repulsion, not tides: nothing to tear with
                 float massRatio = heavy.mass / small.mass;
                 if (heavy.mass < 800.0f || massRatio < 12.0f) continue;
@@ -353,6 +355,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         }
         if (big.isBlackHole) big.color = {168, 120, 255, 255};
         else if (big.isWhiteHole) big.color = WHITEHOLE_COLOR;
+        else if (big.isNeutronStar) big.color = NEUTRONSTAR_COLOR;
         else big.color = ColorForMass(big.mass);
 
         if (impacts) {

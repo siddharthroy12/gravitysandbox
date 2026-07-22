@@ -15,10 +15,12 @@ struct Body {
     bool alive = true;
     bool isBlackHole = false;   // renders as event horizon + accretion disk
     bool isWhiteHole = false;   // repels matter instead of attracting it
+    bool isNeutronStar = false; // renders as a tiny dense core with a sweeping beam
     int id = 0;          // stable identity; survives merges (the bigger body keeps its id)
 };
 
 inline constexpr Color WHITEHOLE_COLOR = {255, 244, 214, 255};
+inline constexpr Color NEUTRONSTAR_COLOR = {205, 235, 255, 255};
 
 inline int g_nextBodyId = 1;
 
