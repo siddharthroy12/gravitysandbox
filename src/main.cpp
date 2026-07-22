@@ -557,7 +557,9 @@ static void UpdateDrawFrame() {
     bool dustTrails = bodies.size() < 500;   // in dense scenes dust reads better without trails
     float dustSize = fmaxf(2.4f, 2.0f / camera.zoom);   // never shrinks below ~2 screen px
     for (auto& b : bodies) {
-        bool dust = IsDust(b.mass);
+        // holes are never dust: tiny ones still render as horizon + disk,
+        // and the bright dust quad must not bleed through the event horizon
+        bool dust = IsDust(b.mass) && !b.isBlackHole && !b.isWhiteHole;
         if (trailsOn && (dustTrails || !dust) && (int)b.trail.size() > trailStride) {
             float trailWidth = std::max(2.0f, MassToRadius(b.mass) * 0.35f);
             for (size_t k = trailStride; k < b.trail.size(); k += trailStride) {
@@ -590,7 +592,7 @@ static void UpdateDrawFrame() {
     BeginBlendMode(BLEND_ADDITIVE);
     float dustGlow = dustSize * 2.6f;
     for (const Body& b : bodies) {
-        if (!IsDust(b.mass)) continue;
+        if (!IsDust(b.mass) || b.isBlackHole || b.isWhiteHole) continue;
         DrawRectangleRec({b.pos.x - dustGlow / 2, b.pos.y - dustGlow / 2, dustGlow, dustGlow},
                          Fade(b.color, 0.22f));
     }
@@ -649,7 +651,7 @@ static void UpdateDrawFrame() {
         float ghostDust = fmaxf(2.4f, 2.0f / camera.zoom);
         for (const Body& b : previewBodies) {
             Vector2 p = Vector2Add(b.pos, anchor);
-            if (IsDust(b.mass)) {
+            if (IsDust(b.mass) && !b.isBlackHole && !b.isWhiteHole) {
                 DrawRectangleRec({p.x - ghostDust / 2, p.y - ghostDust / 2, ghostDust, ghostDust},
                                  Fade(b.color, 0.5f));
             } else {
