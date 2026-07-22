@@ -28,6 +28,64 @@ static const float TRAIL_LEN_MAX = 2000.0f;
 static const float MASS_MIN = 1.0f;
 static const float MASS_MAX = 20000.0f;
 
+// Deep-space backdrop: vertical gradient, faint nebula tints, and a twinkling
+// starfield. Stars and nebulae shift with a small parallax factor when the
+// camera pans (but not when it zooms), so they read as infinitely far away.
+static void DrawSpaceBackground(int w, int h, Vector2 camTarget) {
+    DrawRectangleGradientV(0, 0, w, h, CLITERAL(Color){12, 14, 30, 255},
+                           CLITERAL(Color){3, 4, 10, 255});
+
+    float t = (float)GetTime();
+    BeginBlendMode(BLEND_ADDITIVE);
+
+    // nebulae: huge soft radial tints, wrapped across a tile larger than the
+    // screen so panning always keeps some in view
+    const float nebPar = 0.03f;
+    float tileW = w * 1.6f, tileH = h * 1.6f;
+    struct Neb { float u, v, r; Color c; };
+    const Neb nebs[3] = {
+        {0.70f, 0.25f, 0.55f, {80, 60, 160, 255}},    // violet
+        {0.15f, 0.75f, 0.50f, {40, 110, 130, 255}},   // teal
+        {0.45f, 0.55f, 0.65f, {70, 50, 120, 255}},    // dim violet
+    };
+    for (const Neb& n : nebs) {
+        float nx = fmodf(n.u * tileW - camTarget.x * nebPar, tileW);
+        float ny = fmodf(n.v * tileH - camTarget.y * nebPar, tileH);
+        if (nx < 0) nx += tileW;
+        if (ny < 0) ny += tileH;
+        DrawCircleGradient({nx - (tileW - w) / 2, ny - (tileH - h) / 2}, w * n.r,
+                           Fade(n.c, 0.055f), Fade(n.c, 0.0f));
+    }
+
+    // starfield: positions and character from a per-index hash, so it's stable
+    // frame to frame without storing anything
+    const float starPar = 0.07f;
+    int count = (int)Clamp(w * h / 11000.0f, 60.0f, 220.0f);
+    for (int i = 0; i < count; i++) {
+        unsigned int h1 = (unsigned int)i * 2654435761u + 1013904223u;
+        float sx = ((h1 >> 8) & 0xffff) / 65535.0f * w;
+        float sy = ((h1 >> 15) & 0xffff) / 65535.0f * h;
+        float px = fmodf(sx - camTarget.x * starPar, (float)w);
+        float py = fmodf(sy - camTarget.y * starPar, (float)h);
+        if (px < 0) px += w;
+        if (py < 0) py += h;
+
+        float bright = 0.25f + ((h1 >> 3) & 255) / 255.0f * 0.5f;
+        float phase = ((h1 >> 11) & 255) / 255.0f * 2.0f * PI;
+        float speed = 0.4f + ((h1 >> 19) & 255) / 255.0f * 1.2f;
+        float twinkle = 0.75f + 0.25f * sinf(t * speed + phase);
+        float size = 1.0f + ((h1 >> 23) & 3) * 0.5f;
+        // a few stars get a subtle warm or cool tint
+        Color c = WHITE;
+        int tint = (h1 >> 27) & 7;
+        if (tint == 0) c = CLITERAL(Color){200, 215, 255, 255};
+        else if (tint == 1) c = CLITERAL(Color){255, 230, 200, 255};
+        DrawRectangleRec({px - size / 2, py - size / 2, size, size},
+                         Fade(c, bright * twinkle));
+    }
+    EndBlendMode();
+}
+
 static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHeight) {
     Vector2 topLeft = GetScreenToWorld2D({0, 0}, camera);
     Vector2 bottomRight = GetScreenToWorld2D({(float)screenWidth, (float)screenHeight}, camera);
@@ -514,6 +572,15 @@ static void UpdateDrawFrame() {
     }
     BeginTextureMode(sceneRT);
     ClearBackground(BLACK);
+
+    // backdrop first, in logical pixels, so everything else layers over it
+    {
+        Camera2D bgCam = {};
+        bgCam.zoom = fbScale;
+        BeginMode2D(bgCam);
+        DrawSpaceBackground(screenWidth, screenHeight, camera.target);
+        EndMode2D();
+    }
 
     // shader-warped spacetime grid replaces the flat grid while active
     bool curvedGrid = curvatureOn && CurvatureReady();
