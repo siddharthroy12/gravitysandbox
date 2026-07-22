@@ -187,19 +187,40 @@ static void DrawHoleFX(Vector2 p, float r, float time, const HolePalette& pal) {
 
 // ---------- neutron star rendering ----------
 
-// A pulsar-style lighthouse beam: a tapered wedge fading with distance, swept
-// by `angle`. Two are drawn 180 degrees apart, spinning far faster than any
-// orbit in the sim, which is the whole visual joke of a neutron star.
+// One soft-edged wedge: a fan of thin triangles from the core out to the tip.
+// Each vertex fades on two axes at once - alpha drops with distance from the
+// core (DrawTriangleGradient interpolates it per pixel, a Gouraud gradient)
+// and again toward the cone's outer edges via `edgeMid` - so there is no
+// hard boundary in either direction, unlike a single flat-color DrawTriangle.
+static void DrawPulsarWedge(Vector2 c, float angle, float halfAngle, float len, Color col,
+                            float baseAlpha) {
+    const int segs = 10;
+    Color transparent = Fade(col, 0.0f);
+    for (int i = 0; i < segs; i++) {
+        float a0 = angle - halfAngle + (2.0f * halfAngle) * i / segs;
+        float a1 = angle - halfAngle + (2.0f * halfAngle) * (i + 1) / segs;
+        // 0 at the cone's centerline, 1 at its outer edges: makes this slice
+        // of the fan dimmer the further it sits from the beam's spine
+        float edgeMid = fabsf((i + 0.5f) / segs - 0.5f) * 2.0f;
+        Color baseCol = Fade(col, baseAlpha * (1.0f - edgeMid));
+
+        Vector2 tip0 = {c.x + cosf(a0) * len, c.y + sinf(a0) * len};
+        Vector2 tip1 = {c.x + cosf(a1) * len, c.y + sinf(a1) * len};
+        // DrawTriangleGradient wants counter-clockwise vertices or it culls
+        // the triangle silently; tip1 then tip0 is the correct order here
+        DrawTriangleGradient(c, tip1, tip0, baseCol, transparent, transparent);
+    }
+}
+
+// A pulsar-style lighthouse beam: three stacked wedges (narrow+bright inside
+// a wider, dimmer glow) so the whole cone reads as a soft gradient with no
+// hard edge, lengthwise or sideways. Two are drawn 180 degrees apart,
+// spinning far faster than any orbit in the sim - the visual joke of a
+// neutron star.
 static void DrawPulsarBeam(Vector2 c, float angle, float len, Color col) {
-    float half = 4.0f * DEG2RAD;   // narrow cone
-    Vector2 dir = {cosf(angle), sinf(angle)};
-    Vector2 perpNear = {-sinf(angle) * 1.5f, cosf(angle) * 1.5f};
-    Vector2 tipL = Vector2Add(c, Vector2Scale({cosf(angle + half), sinf(angle + half)}, len));
-    Vector2 tipR = Vector2Add(c, Vector2Scale({cosf(angle - half), sinf(angle - half)}, len));
-    Vector2 baseL = Vector2Add(c, perpNear);
-    Vector2 baseR = Vector2Subtract(c, perpNear);
-    DrawTriangle(baseL, tipL, tipR, Fade(col, 0.5f));
-    DrawTriangle(baseL, tipR, baseR, Fade(col, 0.5f));
+    DrawPulsarWedge(c, angle, 9.0f * DEG2RAD, len * 1.15f, col, 0.10f);
+    DrawPulsarWedge(c, angle, 5.5f * DEG2RAD, len, col, 0.20f);
+    DrawPulsarWedge(c, angle, 2.5f * DEG2RAD, len * 0.85f, col, 0.45f);
 }
 
 static void DrawNeutronStarFX(Vector2 p, float r, float time) {
