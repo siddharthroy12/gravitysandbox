@@ -57,7 +57,19 @@ static void DrawSpaceGrid(const Camera2D& camera, int screenWidth, int screenHei
     DrawLineEx({topLeft.x, 0}, {bottomRight.x, 0}, 1.5f / camera.zoom, Fade(WHITE, 0.18f));
 }
 
-// ---------- black hole rendering ----------
+// ---------- black / white hole rendering ----------
+
+struct HolePalette {
+    Color bright, mid, deep;   // disk gradient, inner to outer
+    Color ringCore;            // hottest ring highlight
+    Color core;                // event horizon fill
+};
+static const HolePalette BH_PALETTE = {{215, 185, 255, 255}, {150, 100, 255, 255},
+                                       {100, 55, 220, 255},  {225, 205, 255, 255},
+                                       {0, 0, 0, 255}};
+static const HolePalette WH_PALETTE = {{255, 252, 240, 255}, {255, 214, 120, 255},
+                                       {255, 160, 60, 255},  {255, 255, 250, 255},
+                                       {255, 255, 255, 255}};
 
 static Color BHLerpColor(Color a, Color b, float t) {
     return {(unsigned char)(a.r + (b.r - a.r) * t), (unsigned char)(a.g + (b.g - a.g) * t),
@@ -67,10 +79,7 @@ static Color BHLerpColor(Color a, Color b, float t) {
 // One half of the flattened accretion disk (back = upper arcs, drawn behind the
 // horizon; front = lower arcs, drawn over it). Strands are static ellipses with
 // a traveling brightness wave, which reads as swirling gas without arc clipping.
-static void DrawBHDiskHalf(Vector2 c, float r, float time, bool back) {
-    const Color lavender = {215, 185, 255, 255};
-    const Color violet = {150, 100, 255, 255};
-    const Color deepPurple = {100, 55, 220, 255};
+static void DrawHoleDiskHalf(Vector2 c, float r, float time, bool back, const HolePalette& pal) {
     const int strands = 18;
     float a0 = back ? 180.0f : 0.0f;
 
@@ -84,8 +93,8 @@ static void DrawBHDiskHalf(Vector2 c, float r, float time, bool back) {
         float speed = 140.0f / (0.4f + t01);                // inner gas swirls faster
         float phase = time * speed + rnd1 * 360.0f;
         int freq = 2 + (int)(rnd2 * 2.99f);
-        Color col = (t01 < 0.5f) ? BHLerpColor(lavender, violet, t01 * 2.0f)
-                                 : BHLerpColor(violet, deepPurple, t01 * 2.0f - 1.0f);
+        Color col = (t01 < 0.5f) ? BHLerpColor(pal.bright, pal.mid, t01 * 2.0f)
+                                 : BHLerpColor(pal.mid, pal.deep, t01 * 2.0f - 1.0f);
         float baseAlpha = (0.30f - 0.22f * t01) * (0.7f + 0.3f * rnd2);
         float thick = fmaxf(r * (0.055f - 0.030f * t01), 1.2f);
 
@@ -100,25 +109,21 @@ static void DrawBHDiskHalf(Vector2 c, float r, float time, bool back) {
     }
 }
 
-static void DrawBlackHoleFX(Vector2 p, float r, float time) {
-    const Color violet = {150, 100, 255, 255};
-    const Color deepPurple = {100, 55, 220, 255};
-    const Color ringCore = {225, 205, 255, 255};
-
+static void DrawHoleFX(Vector2 p, float r, float time, const HolePalette& pal) {
     BeginBlendMode(BLEND_ADDITIVE);
-    DrawCircleV(p, r * 4.6f, Fade(deepPurple, 0.05f));      // ambient violet haze
-    DrawCircleV(p, r * 2.4f, Fade(violet, 0.07f));
-    DrawBHDiskHalf(p, r, time, true);                       // far side of the disk
+    DrawCircleV(p, r * 4.6f, Fade(pal.deep, 0.05f));        // ambient haze
+    DrawCircleV(p, r * 2.4f, Fade(pal.mid, 0.07f));
+    DrawHoleDiskHalf(p, r, time, true, pal);                // far side of the disk
     EndBlendMode();
 
-    DrawCircleV(p, r * 1.02f, BLACK);                       // event horizon
+    DrawCircleV(p, r * 1.02f, pal.core);                    // horizon (black) / core (white)
 
     BeginBlendMode(BLEND_ADDITIVE);
-    DrawRing(p, r * 1.42f, r * 1.47f, 0, 360, 72, Fade(violet, 0.12f));   // lensing shell
-    DrawRing(p, r * 1.04f, r * 1.18f, 0, 360, 72, Fade(violet, 0.50f));   // photon ring
-    DrawRing(p, r * 1.05f, r * 1.12f, 0, 360, 72, Fade(ringCore, 0.85f));
-    DrawRing(p, r * 1.18f, r * 1.34f, 0, 360, 72, Fade(violet, 0.16f));   // ring bloom
-    DrawBHDiskHalf(p, r, time, false);                      // near side crosses the horizon
+    DrawRing(p, r * 1.42f, r * 1.47f, 0, 360, 72, Fade(pal.mid, 0.12f));   // lensing shell
+    DrawRing(p, r * 1.04f, r * 1.18f, 0, 360, 72, Fade(pal.mid, 0.50f));   // photon ring
+    DrawRing(p, r * 1.05f, r * 1.12f, 0, 360, 72, Fade(pal.ringCore, 0.85f));
+    DrawRing(p, r * 1.18f, r * 1.34f, 0, 360, 72, Fade(pal.mid, 0.16f));   // ring bloom
+    DrawHoleDiskHalf(p, r, time, false, pal);               // near side crosses the horizon
     EndBlendMode();
 }
 
@@ -239,7 +244,8 @@ static float TotalEnergy(const std::vector<Body>& scene) {
         kinetic += 0.5f * scene[i].mass * Vector2LengthSqr(scene[i].vel);
         for (size_t j = i + 1; j < scene.size(); j++) {
             Vector2 delta = Vector2Subtract(scene[j].pos, scene[i].pos);
-            potential -= G * scene[i].mass * scene[j].mass /
+            // signed masses: a white hole pair's repulsive potential is positive
+            potential -= G * GravMass(scene[i]) * GravMass(scene[j]) /
                          sqrtf(Vector2LengthSqr(delta) + SOFTENING2);
         }
     }
@@ -287,7 +293,7 @@ static void UpdateDrawFrame() {
     // Panel content is 816px tall (rows below); cap the backdrop to the window.
     const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f,
                              fminf(520.0f, screenHeight - 20.0f)};
-    const Rectangle leftPanel = {10.0f, 10.0f, 252.0f, 362.0f};
+    const Rectangle leftPanel = {10.0f, 10.0f, 252.0f, 398.0f};
     const float infoW = 480.0f;
     const Rectangle infoPanel = {screenWidth - infoW - 10.0f, screenHeight - 44.0f, infoW, 34.0f};
     Vector2 mouseScreen = GetMousePosition();
@@ -322,7 +328,8 @@ static void UpdateDrawFrame() {
 
     // the single-body patterns are sized by the mass selection: rebuild the
     // pending preview whenever the mass changes so the ghost stays honest
-    if ((pendingPattern == PAT_PLANET || pendingPattern == PAT_BLACKHOLE) &&
+    if ((pendingPattern == PAT_PLANET || pendingPattern == PAT_BLACKHOLE ||
+         pendingPattern == PAT_WHITEHOLE) &&
         currentMass != patternMass) {
         previewBodies = MakePattern(pendingPattern, {0, 0}, currentMass);
         patternMass = currentMass;
@@ -566,16 +573,17 @@ static void UpdateDrawFrame() {
                           (unsigned char)((b.color.b + 255) / 2), 255};
             DrawRectangleRec({b.pos.x - dustSize / 2, b.pos.y - dustSize / 2, dustSize, dustSize},
                              core);
-        } else if (!b.isBlackHole) {
+        } else if (!b.isBlackHole && !b.isWhiteHole) {
             DrawCircleV(b.pos, MassToRadius(b.mass), b.color);
         }
-        // black holes render in their own layered pass below
+        // black and white holes render in their own layered pass below
     }
 
-    // black holes: far disk behind the horizon, photon ring + near disk over it
+    // holes: far disk behind the horizon, photon ring + near disk over it
     float bhTime = (float)GetTime();
     for (const Body& b : bodies) {
-        if (b.isBlackHole) DrawBlackHoleFX(b.pos, MassToRadius(b.mass), bhTime);
+        if (b.isBlackHole) DrawHoleFX(b.pos, MassToRadius(b.mass), bhTime, BH_PALETTE);
+        else if (b.isWhiteHole) DrawHoleFX(b.pos, MassToRadius(b.mass), bhTime, WH_PALETTE);
     }
 
     // additive pass: dust glow, hot halos on heavy bodies, then impact shockwaves
@@ -587,7 +595,7 @@ static void UpdateDrawFrame() {
                          Fade(b.color, 0.22f));
     }
     for (const Body& b : bodies) {
-        if (b.mass < 800.0f || b.isBlackHole) continue;
+        if (b.mass < 800.0f || b.isBlackHole || b.isWhiteHole) continue;
         float r = MassToRadius(b.mass);
         float halo = r * (1.8f + std::min(b.mass / 10000.0f, 1.2f));
         DrawCircleV(b.pos, halo, Fade(b.color, 0.10f));
@@ -661,11 +669,13 @@ static void UpdateDrawFrame() {
                 // the curve reads as dotted at any speed or zoom.
                 if (previewBodies.size() == 1) {
                     Color previewColor = previewBodies[0].color;
+                    // a white hole candidate is repelled by the field, not pulled
+                    float fieldSign = previewBodies[0].isWhiteHole ? -1.0f : 1.0f;
                     Vector2 pos = patternAnchor;
                     Vector2 vel = Vector2Scale(pull, flickScale);
                     float sinceDot = previewDotSpacing;   // draw a dot on the first step
                     for (int i = 0; i < previewSteps; i++) {
-                        Vector2 acc = GravityFieldAt(bodies, pos);
+                        Vector2 acc = Vector2Scale(GravityFieldAt(bodies, pos), fieldSign);
                         vel = Vector2Add(vel, Vector2Scale(acc, previewDt));
                         pos = Vector2Add(pos, Vector2Scale(vel, previewDt));
                         sinceDot += Vector2Length(vel) * previewDt * camera.zoom;
@@ -765,6 +775,9 @@ static void UpdateDrawFrame() {
                   "A single planet sized by the MASS slider");
     patternButton({col2, ly, colW, 32}, "Black Hole", PAT_BLACKHOLE,
                   "A black hole with a swirling accretion disk; sized by the MASS slider");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "White Hole", PAT_WHITEHOLE,
+                  "A white hole that repels matter and can't be entered; sized by the MASS slider");
 
     // ---- Right UI panel ----
     DrawPanel(panel, UI_BORDER);

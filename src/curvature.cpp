@@ -35,11 +35,11 @@ static const char* CURV_FS_BODY =
     "        if (i >= uCount) break;\n"
     "        vec2 d = uPos[i] - world;\n"
     "        float dist = length(d) + 1.0;\n"
-    "        float pull = uMass[i]/(0.02*dist*dist + 6.0*dist + 300.0);\n"
+    "        float pull = abs(uMass[i])/(0.02*dist*dist + 6.0*dist + 300.0);\n"
     "        float x = pull*14.0/dist;\n"
     "        float mag = dist*x/(1.0 + x);\n"   // smooth saturation: approaches but never\n"
-    "        disp += (d/dist)*mag;\n"           // reaches the well center, so no flat plateau\n"
-    "        depth += pull;\n"
+    "        disp += (d/dist)*mag*sign(uMass[i]);\n"   // reaches the center; negative mass\n"
+    "        depth += pull;\n"                         // (white hole) bumps lines outward\n"
     "    }\n"
     "\n"
     "    vec2 warped = world - disp;\n"   // lines bend toward the well, not away
@@ -119,7 +119,7 @@ void CurvatureDraw(const std::vector<Body>& bodies, const Camera2D& camera,
     for (int k = 0; k < count; k++) {
         pos[k * 2] = bodies[order[k]].pos.x;
         pos[k * 2 + 1] = bodies[order[k]].pos.y;
-        mass[k] = bodies[order[k]].mass;
+        mass[k] = GravMass(bodies[order[k]]);
     }
 
     float res[2] = {(float)screenWidth, (float)screenHeight};

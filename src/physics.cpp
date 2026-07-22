@@ -45,9 +45,14 @@ void Insert(std::vector<BHField::Node>& nodes, int idx, const std::vector<Body>&
             int bi, int depth) {
     {
         BHField::Node& n = nodes[idx];
-        float tm = n.mass + bodies[bi].mass;
-        n.com.x = (n.com.x * n.mass + bodies[bi].pos.x * bodies[bi].mass) / tm;
-        n.com.y = (n.com.y * n.mass + bodies[bi].pos.y * bodies[bi].mass) / tm;
+        float gm = GravMass(bodies[bi]);
+        float tm = n.mass + gm;
+        // signed masses can cancel to ~0; leave the com alone then (the
+        // node's force contribution is ~0 anyway)
+        if (fabsf(tm) > 1e-4f) {
+            n.com.x = (n.com.x * n.mass + bodies[bi].pos.x * gm) / tm;
+            n.com.y = (n.com.y * n.mass + bodies[bi].pos.y * gm) / tm;
+        }
         n.mass = tm;
         n.count++;
     }
@@ -94,7 +99,7 @@ Vector2 BHField::AccelAt(Vector2 p, int self) {
         int idx = stack.back();
         stack.pop_back();
         const Node& n = nodes[idx];
-        if (n.mass <= 0) continue;
+        if (n.count == 0) continue;
         if (n.body == self && n.count == 1) continue;   // the leaf that is exactly us
 
         Vector2 d = {n.com.x - p.x, n.com.y - p.y};
@@ -122,8 +127,8 @@ Vector2 GravityFieldAt(const std::vector<Body>& bodies, Vector2 p) {
         Vector2 d = Vector2Subtract(b.pos, p);
         float inv = 1.0f / sqrtf(d.x * d.x + d.y * d.y + SOFTENING2);
         float inv3 = inv * inv * inv;
-        acc.x += G * b.mass * d.x * inv3;
-        acc.y += G * b.mass * d.y * inv3;
+        acc.x += G * GravMass(b) * d.x * inv3;
+        acc.y += G * GravMass(b) * d.y * inv3;
     }
     return acc;
 }
@@ -139,7 +144,11 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         // Barnes-Hut: O(n log n)
         BHField field;
         field.Build(bodies);
-        for (size_t i = 0; i < n; i++) accel[i] = field.AccelAt(bodies[i].pos, (int)i);
+        for (size_t i = 0; i < n; i++) {
+            accel[i] = field.AccelAt(bodies[i].pos, (int)i);
+            // a white hole's own response to the field is inverted too
+            if (bodies[i].isWhiteHole) accel[i] = Vector2Scale(accel[i], -1.0f);
+        }
     } else {
         // brute force: O(n^2), slightly more accurate for small scenes
         for (size_t i = 0; i < n; i++) {
@@ -150,8 +159,10 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                 float invDist3 = invDist * invDist * invDist;
 
                 Vector2 forceDir = Vector2Scale(d, invDist3);
-                accel[i] = Vector2Add(accel[i], Vector2Scale(forceDir, G * bodies[j].mass));
-                accel[j] = Vector2Subtract(accel[j], Vector2Scale(forceDir, G * bodies[i].mass));
+                float si = bodies[i].isWhiteHole ? -1.0f : 1.0f;
+                float sj = bodies[j].isWhiteHole ? -1.0f : 1.0f;
+                accel[i] = Vector2Add(accel[i], Vector2Scale(forceDir, G * si * GravMass(bodies[j])));
+                accel[j] = Vector2Subtract(accel[j], Vector2Scale(forceDir, G * sj * GravMass(bodies[i])));
             }
         }
     }
@@ -181,7 +192,8 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                 if (!bodies[i].alive || !bodies[j].alive) continue;
                 Body& heavy = (bodies[i].mass >= bodies[j].mass) ? bodies[i] : bodies[j];
                 Body& small = (bodies[i].mass >= bodies[j].mass) ? bodies[j] : bodies[i];
-                if (small.isBlackHole) continue;   // black holes are never torn apart
+                if (small.isBlackHole || small.isWhiteHole) continue;   // holes are never torn apart
+                if (heavy.isWhiteHole) continue;   // repulsion, not tides: nothing to tear with
                 float massRatio = heavy.mass / small.mass;
                 if (heavy.mass < 800.0f || massRatio < 12.0f) continue;
 
@@ -245,6 +257,11 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         float minDist = CollisionRadius(bodies[i].mass) + CollisionRadius(bodies[j].mass);
         if (dist >= minDist) return;
 
+        // matter cannot enter a white hole: it only merges with another white
+        // hole (they attract each other) or gets swallowed by a black hole
+        bool iWH = bodies[i].isWhiteHole, jWH = bodies[j].isWhiteHole;
+        if ((iWH != jWH) && !bodies[i].isBlackHole && !bodies[j].isBlackHole) return;
+
         float m1 = bodies[i].mass, m2 = bodies[j].mass;
         float totalMass = m1 + m2;
         // a black hole always wins: it absorbs the other body regardless of mass
@@ -275,7 +292,8 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         // spray part of the smaller body back out as fragments; a black hole
         // swallows everything, so no debris escapes the merge
         float debrisMass = 0.25f * std::min(m1, m2);
-        if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f && !big.isBlackHole) {
+        if (collisionMode == COLLIDE_DEBRIS && debrisMass >= 4.0f && !big.isBlackHole &&
+            !big.isWhiteHole) {
             // small dust-sized fragments, capped so huge impacts stay bounded
             int count = (int)Clamp(ceilf(debrisMass / 2.0f), 4.0f, 16.0f);
             float fragMass = debrisMass / count;
@@ -304,6 +322,7 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
             }
         }
         if (big.isBlackHole) big.color = {168, 120, 255, 255};
+        else if (big.isWhiteHole) big.color = WHITEHOLE_COLOR;
         else big.color = ColorForMass(big.mass);
 
         if (impacts) {

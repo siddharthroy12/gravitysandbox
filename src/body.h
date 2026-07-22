@@ -14,8 +14,11 @@ struct Body {
     std::deque<Vector2> trail;
     bool alive = true;
     bool isBlackHole = false;   // renders as event horizon + accretion disk
+    bool isWhiteHole = false;   // repels matter instead of attracting it
     int id = 0;          // stable identity; survives merges (the bigger body keeps its id)
 };
+
+inline constexpr Color WHITEHOLE_COLOR = {255, 244, 214, 255};
 
 inline int g_nextBodyId = 1;
 
@@ -25,6 +28,14 @@ inline constexpr float SOFTENING2 = 400.0f;   // softening^2, avoids singulariti
 // Bodies lighter than this render as glowing points ("dust") instead of
 // circles, which keeps multi-thousand-body scenes cheap to draw.
 inline constexpr float DUST_MASS_MAX = 5.0f;
+
+// Signed gravitational mass: a white hole's field pushes instead of pulls.
+// The sign applies on both sides of an interaction (a white hole is also
+// repelled by ordinary matter), which keeps Newton's third law and momentum
+// conservation intact; two white holes attract each other.
+inline float GravMass(const Body& b) {
+    return b.isWhiteHole ? -b.mass : b.mass;
+}
 
 inline bool IsDust(float mass) {
     return mass < DUST_MASS_MAX;

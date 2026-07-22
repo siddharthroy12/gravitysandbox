@@ -15,7 +15,8 @@ enum PatternType {
     PAT_COLLIDE,
     PAT_COMETS,
     PAT_BLACKHOLE,
-    PAT_PLANET
+    PAT_PLANET,
+    PAT_WHITEHOLE
 };
 
 // Build a pattern's bodies centered on `c` (pass {0,0} for cursor-relative

@@ -162,6 +162,13 @@ static void SpawnPlanet(std::vector<Body>& bodies, Vector2 c, float mass) {
     AddBody(bodies, c, {0, 0}, mass);
 }
 
+static void SpawnWhiteHole(std::vector<Body>& bodies, Vector2 c, float mass) {
+    AddBody(bodies, c, {0, 0}, mass);
+    Body& wh = bodies.back();
+    wh.isWhiteHole = true;
+    wh.color = WHITEHOLE_COLOR;
+}
+
 std::vector<Body> MakePattern(int type, Vector2 c, float mass) {
     std::vector<Body> v;
     switch (type) {
@@ -177,6 +184,7 @@ std::vector<Body> MakePattern(int type, Vector2 c, float mass) {
         case PAT_COMETS: SpawnComets(v, c); break;
         case PAT_BLACKHOLE: SpawnBlackHole(v, c, mass); break;
         case PAT_PLANET: SpawnPlanet(v, c, mass); break;
+        case PAT_WHITEHOLE: SpawnWhiteHole(v, c, mass); break;
     }
     return v;
 }
