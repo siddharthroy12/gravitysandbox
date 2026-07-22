@@ -222,15 +222,15 @@ void UITooltip(const char* text) {
 
 void UIDrawTooltip() {
     if (!g_tooltip) return;
-    const float size = 15.0f, pad = 8.0f;
+    const float size = 15.0f, padX = 12.0f, padY = 8.0f;
     float tw = UITextWidth(g_tooltip, size);
-    Rectangle box = {g_tooltipPos.x + 14, g_tooltipPos.y + 18, tw + pad * 2, size + pad * 2};
+    Rectangle box = {g_tooltipPos.x + 14, g_tooltipPos.y + 18, tw + padX * 2, size + padY * 2};
     // keep the box on screen; flip above the cursor if it would clip the bottom
     if (box.x + box.width > GetScreenWidth() - 4) box.x = GetScreenWidth() - 4 - box.width;
     if (box.y + box.height > GetScreenHeight() - 4) box.y = g_tooltipPos.y - box.height - 6;
-    DrawRectangleRec(box, UI_BG);
-    DrawRectangleLinesEx(box, 1, UI_BORDER_LIT);
-    UIText(g_tooltip, box.x + pad, box.y + pad, size, UI_TEXT);
+    // rounded borderless card, matching the modern widget style
+    DrawRectangleRounded(box, 0.5f, 8, CLITERAL(Color){13, 13, 15, 235});
+    UIText(g_tooltip, box.x + padX, box.y + padY, size, UI_TEXT);
     g_tooltip = nullptr;
 }
 
@@ -243,10 +243,9 @@ bool UIButton(Rectangle r, const char* label, const char* tip) {
     Vector2 m = GetMousePosition();
     bool hover = CheckCollisionPointRec(m, r);
     if (hover && tip) UITooltip(tip);
-    Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
-    if (hover && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) bg = UI_BTN_PRESS;
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 1, hover ? UI_BORDER_LIT : UI_BORDER);
+    // translucent white over the frosted panel, brightening on hover/press
+    float a = hover ? (IsMouseButtonDown(MOUSE_BUTTON_LEFT) ? 0.20f : 0.13f) : 0.07f;
+    DrawRectangleRounded(r, 0.35f, 8, Fade(WHITE, a));
     float tw = UITextWidth(label, 18);
     UIText(label, r.x + (r.width - tw) / 2, r.y + (r.height - 18) / 2, 18,
            hover ? UI_VALUE : UI_TEXT);
@@ -259,19 +258,18 @@ bool UIToggle(Rectangle r, const char* label, bool state, const char* tip) {
     Vector2 m = GetMousePosition();
     bool hover = CheckCollisionPointRec(m, r);
     if (hover && tip) UITooltip(tip);
+    float tw = UITextWidth(label, 18);
     if (state) {
-        // filled: white block with dark text, like a primary button
+        // filled: white pill with dark text, like a primary button
         Color bg = hover ? CLITERAL(Color){215, 215, 218, 255} : CLITERAL(Color){235, 235, 238, 255};
-        DrawRectangleRec(r, bg);
-        float tw = UITextWidth(label, 18);
+        DrawRectangleRounded(r, 0.35f, 8, bg);
         UIText(label, r.x + (r.width - tw) / 2, r.y + (r.height - 18) / 2, 18,
                CLITERAL(Color){18, 18, 20, 255});
     } else {
-        Color bg = hover ? UI_BTN_HOVER : UI_BTN_BG;
-        DrawRectangleRec(r, bg);
-        DrawRectangleLinesEx(r, 1, hover ? UI_BORDER_LIT : UI_BORDER);
-        float tw = UITextWidth(label, 18);
-        UIText(label, r.x + (r.width - tw) / 2, r.y + (r.height - 18) / 2, 18, UI_LABEL);
+        float a = hover ? (IsMouseButtonDown(MOUSE_BUTTON_LEFT) ? 0.20f : 0.13f) : 0.07f;
+        DrawRectangleRounded(r, 0.35f, 8, Fade(WHITE, a));
+        UIText(label, r.x + (r.width - tw) / 2, r.y + (r.height - 18) / 2, 18,
+               hover ? UI_TEXT : UI_LABEL);
     }
     bool clicked = hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
     // turning on ticks slightly higher than turning off
@@ -296,11 +294,14 @@ float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* draggi
 
     float cy = r.y + r.height / 2;
     float kx = r.x + r.width * t;
-    DrawRectangleRec({r.x, cy - 2, r.width, 4}, CLITERAL(Color){55, 55, 60, 255});
-    DrawRectangleRec({r.x, cy - 2, kx - r.x, 4}, CLITERAL(Color){235, 235, 238, 255});
-    // square knob
-    float kh = (hover || *dragging) ? 14.0f : 12.0f;
-    Rectangle knob = {kx - kh / 2, cy - kh / 2, kh, kh};
-    DrawRectangleRec(knob, WHITE);
+    // pill track, filled up to the knob; circular knob with a hover halo
+    DrawRectangleRounded({r.x, cy - 2.5f, r.width, 5.0f}, 1.0f, 6, Fade(WHITE, 0.14f));
+    if (kx - r.x > 5.0f) {
+        DrawRectangleRounded({r.x, cy - 2.5f, kx - r.x, 5.0f}, 1.0f, 6,
+                             CLITERAL(Color){235, 235, 238, 255});
+    }
+    bool active = hover || *dragging;
+    if (active) DrawCircleV({kx, cy}, 11.0f, Fade(WHITE, 0.18f));
+    DrawCircleV({kx, cy}, active ? 7.5f : 6.5f, WHITE);
     return value;
 }

@@ -900,6 +900,7 @@ static void UpdateDrawFrame() {
     if (UIToggle({px, y, pw, 32}, "Space Curvature (W)", curvatureOn,
                  "Grid bends into gravity wells (GPU shader)")) curvatureOn = !curvatureOn;
     y += 36;
+    y += 12;   // section gap
     UISectionHeader("COLLISION (M)", px, y, pw);
     y += 26;
     float w3 = (pw - 16) / 3;
@@ -918,6 +919,7 @@ static void UpdateDrawFrame() {
         tidalDestruction = !tidalDestruction;
     y += 36;
 
+    y += 12;   // section gap
     const char* trailTxt = TextFormat("%.1fs", trailLength / 60.0f);
     UISectionHeader("TRAIL LENGTH", px, y, pw - UITextWidth(trailTxt, 18) - 10);
     UIText(trailTxt, panel.x + panel.width - 14 - UITextWidth(trailTxt, 18), y, 18, UI_VALUE);
@@ -926,6 +928,7 @@ static void UpdateDrawFrame() {
                                &draggingTrailSlider, "How long trails persist, in seconds");
     y += 34;
 
+    y += 12;   // section gap
     const char* speedTxt = TextFormat("%.1fx", simSpeed);
     UISectionHeader("TIME", px, y, pw - UITextWidth(speedTxt, 18) - 10);
     UIText(speedTxt, panel.x + panel.width - 14 - UITextWidth(speedTxt, 18), y, 18, UI_VALUE);
@@ -933,6 +936,7 @@ static void UpdateDrawFrame() {
     simSpeed = UISliderLog({px, y, pw, 24}, simSpeed, 0.1f, 10.0f, &draggingSpeedSlider,
                            "Simulation speed multiplier");
     y += 34;
+    y += 12;   // section gap
 
     if (UIButton({px, y, pw, 32}, "Reset View (R)", "Return the camera to the origin")) {
         camera.target = {0, 0};
@@ -958,6 +962,7 @@ static void UpdateDrawFrame() {
         energySampleTimer = 0.0f;
     }
     y += 36;
+    y += 12;   // section gap
 
     // ---- stats (FPS / bodies / energy + graph) ----
     UISectionHeader("STATS", px, y, pw);
@@ -987,19 +992,20 @@ static void UpdateDrawFrame() {
     y += 22;
     DrawEnergyGraph({px, y, pw, 22});
     y += 30;
+    y += 12;   // section gap
 
     if (UIToggle({px, y, pw, 32}, "View Controls", showControls,
                  "Every mouse and keyboard control"))
         showControls = !showControls;
     }   // end right panel
 
-    // ---- paused banner (top-center) ----
+    // ---- paused banner (top-center, rounded pill) ----
     if (paused) {
         const char* pauseTxt = "PAUSED  -  SPACE to resume  -  [.] to step";
         float ptw = UITextWidth(pauseTxt, 20);
-        Rectangle banner = {(screenWidth - ptw) / 2.0f - 18, 10, ptw + 36.0f, 40};
-        DrawPanel(banner, UI_BORDER_LIT);
-        UIText(pauseTxt, banner.x + 18, banner.y + 10, 20, GOLD);
+        Rectangle banner = {(screenWidth - ptw) / 2.0f - 24, 10, ptw + 48.0f, 40};
+        DrawRectangleRounded(banner, 1.0f, 12, CLITERAL(Color){13, 13, 15, 215});
+        UIText(pauseTxt, banner.x + 24, banner.y + 10, 20, CLITERAL(Color){255, 120, 190, 255});
     }
 
     // ---- following banner (top-center, stacks under the paused banner) ----
@@ -1009,9 +1015,9 @@ static void UpdateDrawFrame() {
         const char* followTxt = followCenter ? "FOLLOWING CENTER  -  ESC to stop"
                                              : "FOLLOWING  -  ESC to stop";
         float ftw = UITextWidth(followTxt, 20);
-        Rectangle banner = {(screenWidth - ftw) / 2.0f - 18, fy, ftw + 36.0f, 40};
-        DrawPanel(banner, UI_BORDER_LIT);
-        UIText(followTxt, banner.x + 18, banner.y + 10, 20, UI_VALUE);
+        Rectangle banner = {(screenWidth - ftw) / 2.0f - 24, fy, ftw + 48.0f, 40};
+        DrawRectangleRounded(banner, 1.0f, 12, CLITERAL(Color){13, 13, 15, 215});
+        UIText(followTxt, banner.x + 24, banner.y + 10, 20, UI_VALUE);
     }
 
     // ---- controls overlay (left of the right panel) ----
