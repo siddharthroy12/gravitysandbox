@@ -289,6 +289,35 @@ static int lastClickBodyId = -1;
 static bool showControls = false;                   // keyboard/mouse controls overlay
 static bool leftCollapsed = false;                  // left panel folded to a corner tab
 static bool rightCollapsed = false;                 // right panel folded to a corner tab
+static float leftScroll = 0.0f, rightScroll = 0.0f;         // panel content scroll offset
+static float leftMaxScroll = 0.0f, rightMaxScroll = 0.0f;   // updated each frame from real content height
+static bool draggingLeftScrollbar = false, draggingRightScrollbar = false;
+static const float PANEL_HEADER_RESERVE = 40.0f;    // keeps scrolled content clear of the collapse chevron
+
+// A draggable scrollbar thumb along the right edge of a panel's content
+// column. `trackX` is the thumb's left edge; the hit area is padded wider
+// than the thin visual bar so it's easy to grab. Returns the updated scroll.
+static float DrawPanelScrollbar(float trackX, float trackTop, float trackH, float scroll,
+                                float maxScroll, float contentH, bool* dragging) {
+    if (maxScroll <= 0.0f) return scroll;
+    float thumbH = fmaxf(24.0f, trackH * trackH / contentH);
+    float thumbY = trackTop + (trackH - thumbH) * (scroll / maxScroll);
+    Rectangle thumb = {trackX, thumbY, 4.0f, thumbH};
+    Rectangle hitArea = {trackX - 4.0f, thumbY, 12.0f, thumbH};   // wider grab target
+
+    Vector2 m = GetMousePosition();
+    bool hover = CheckCollisionPointRec(m, hitArea);
+    if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) *dragging = true;
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) *dragging = false;
+    if (*dragging) {
+        float travel = trackH - thumbH;
+        if (travel > 0.0f) scroll = Clamp(scroll + GetMouseDelta().y * (maxScroll / travel),
+                                          0.0f, maxScroll);
+    }
+
+    DrawRectangleRounded(thumb, 1.0f, 4, Fade(WHITE, (*dragging || hover) ? 0.45f : 0.25f));
+    return scroll;
+}
 static std::vector<float> energyHistory;
 static float energySampleTimer = 0.0f;
 static constexpr float ENERGY_SAMPLE_INTERVAL = 0.125f;
@@ -425,7 +454,8 @@ static void UpdateDrawFrame() {
                                       : CheckCollisionPointRec(mouseScreen, leftPanel)) ||
                        (showControls && !rightCollapsed &&
                         CheckCollisionPointRec(mouseScreen, controlsPanel)) ||
-                       draggingSlider || draggingTrailSlider || draggingSpeedSlider;
+                       draggingSlider || draggingTrailSlider || draggingSpeedSlider ||
+                       draggingLeftScrollbar || draggingRightScrollbar;
 
     // pan with right or middle mouse drag (manual pan breaks follow mode)
     if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
@@ -443,6 +473,14 @@ static void UpdateDrawFrame() {
         Vector2 worldAfterZoom = GetScreenToWorld2D(mouseScreen, camera);
         camera.target = Vector2Add(camera.target,
                                     Vector2Subtract(worldBeforeZoom, worldAfterZoom));
+    }
+    // scroll a panel's content when it overflows the window and the mouse is
+    // over it; wheel does nothing here otherwise (mouseOverUI already blocks
+    // camera zoom for these same rects)
+    if (wheel != 0 && !leftCollapsed && CheckCollisionPointRec(mouseScreen, leftPanel)) {
+        leftScroll = Clamp(leftScroll - wheel * 50.0f, 0.0f, leftMaxScroll);
+    } else if (wheel != 0 && !rightCollapsed && CheckCollisionPointRec(mouseScreen, panel)) {
+        rightScroll = Clamp(rightScroll - wheel * 50.0f, 0.0f, rightMaxScroll);
     }
 
     // mass control (keys still work alongside slider)
@@ -879,12 +917,16 @@ static void UpdateDrawFrame() {
         if (UIChevron(leftTab, false, true, "Expand the patterns panel")) leftCollapsed = false;
     } else {
     DrawPanel(leftPanel, BLANK);
-    if (UIChevron({leftPanel.width - 34.0f, 6.0f, 28.0f, 28.0f}, true, false,
-                  "Collapse the panel"))
-        leftCollapsed = true;
 
     float lpx = leftPanel.x + 14, lpw = leftPanel.width - 28;
-    float ly = leftPanel.y + 12;
+    float ly = leftPanel.y + PANEL_HEADER_RESERVE - leftScroll;
+    float leftViewportH = screenHeight - PANEL_HEADER_RESERVE;
+    // BeginScissorMode already applies the window's DPI scale internally
+    // (it isn't camera-transformed like BeginMode2D content), so pass plain
+    // logical/CSS pixel coordinates here, not fbScale-multiplied ones.
+    BeginScissorMode((int)leftPanel.x, (int)PANEL_HEADER_RESERVE, (int)leftPanel.width,
+                     (int)leftViewportH);
+    UIBeginInputClip(PANEL_HEADER_RESERVE, (float)screenHeight);
 
     const char* massTxt = TextFormat("%.0f", currentMass);
     UISectionHeader("MASS", lpx, ly, lpw - UITextWidth(massTxt, 18) - 10);
@@ -962,6 +1004,22 @@ static void UpdateDrawFrame() {
     ly += 36;
     patternButton({lpx, ly, colW, 32}, "Neutron Star", PAT_NEUTRONSTAR,
                   "A tiny, ultra-dense star with a sweeping pulsar beam; sized by the MASS slider");
+    ly += 36;
+    UIEndInputClip();
+    EndScissorMode();
+
+    // content height is whatever ly reached, measured from the unscrolled
+    // baseline (ly already has leftScroll subtracted out, so add it back)
+    float leftContentH = (ly + leftScroll) - (leftPanel.y + PANEL_HEADER_RESERVE);
+    leftMaxScroll = fmaxf(0.0f, leftContentH - leftViewportH);
+    leftScroll = Clamp(leftScroll, 0.0f, leftMaxScroll);
+    leftScroll = DrawPanelScrollbar(leftPanel.width - 10.0f, PANEL_HEADER_RESERVE, leftViewportH,
+                                    leftScroll, leftMaxScroll, leftContentH,
+                                    &draggingLeftScrollbar);
+
+    if (UIChevron({leftPanel.width - 34.0f, 6.0f, 28.0f, 28.0f}, true, false,
+                  "Collapse the panel"))
+        leftCollapsed = true;
     }   // end left panel
 
     // ---- Right UI panel ----
@@ -969,12 +1027,13 @@ static void UpdateDrawFrame() {
         if (UIChevron(rightTab, true, true, "Expand the controls panel")) rightCollapsed = false;
     } else {
     DrawPanel(panel, BLANK);
-    if (UIChevron({panel.x + panel.width - 34.0f, 6.0f, 28.0f, 28.0f}, false, false,
-                  "Collapse the panel"))
-        rightCollapsed = true;
 
     float px = panel.x + 14, pw = panel.width - 28;
-    float y = panel.y + 12;
+    float y = panel.y + PANEL_HEADER_RESERVE - rightScroll;
+    float rightViewportH = screenHeight - PANEL_HEADER_RESERVE;
+    BeginScissorMode((int)panel.x, (int)PANEL_HEADER_RESERVE, (int)panel.width,
+                     (int)rightViewportH);
+    UIBeginInputClip(PANEL_HEADER_RESERVE, (float)screenHeight);
 
     UISectionHeader("VIEW", px, y, pw);
     y += 26;
@@ -1092,6 +1151,20 @@ static void UpdateDrawFrame() {
     if (UIToggle({px, y, pw, 32}, "View Controls", showControls,
                  "Every mouse and keyboard control"))
         showControls = !showControls;
+    y += 36;
+    UIEndInputClip();
+    EndScissorMode();
+
+    float rightContentH = (y + rightScroll) - (panel.y + PANEL_HEADER_RESERVE);
+    rightMaxScroll = fmaxf(0.0f, rightContentH - rightViewportH);
+    rightScroll = Clamp(rightScroll, 0.0f, rightMaxScroll);
+    rightScroll = DrawPanelScrollbar(panel.x + panel.width - 10.0f, PANEL_HEADER_RESERVE,
+                                     rightViewportH, rightScroll, rightMaxScroll, rightContentH,
+                                     &draggingRightScrollbar);
+
+    if (UIChevron({panel.x + panel.width - 34.0f, 6.0f, 28.0f, 28.0f}, false, false,
+                  "Collapse the panel"))
+        rightCollapsed = true;
     }   // end right panel
 
     // ---- paused banner (top-center, rounded pill) ----

@@ -207,6 +207,22 @@ bool UIChevron(Rectangle r, bool pointsLeft, bool floating, const char* tip) {
     return clicked;
 }
 
+// ---------- scroll input clipping ----------
+
+static float g_clipTop = -1e9f, g_clipBottom = 1e9f;
+
+void UIBeginInputClip(float top, float bottom) {
+    g_clipTop = top;
+    g_clipBottom = bottom;
+}
+
+void UIEndInputClip() {
+    g_clipTop = -1e9f;
+    g_clipBottom = 1e9f;
+}
+
+static bool WithinInputClip(Vector2 m) { return m.y >= g_clipTop && m.y <= g_clipBottom; }
+
 // ---------- tooltips ----------
 
 static const char* g_tooltip = nullptr;
@@ -241,7 +257,7 @@ void UISectionHeader(const char* label, float x, float y, float width) {
 
 bool UIButton(Rectangle r, const char* label, const char* tip) {
     Vector2 m = GetMousePosition();
-    bool hover = CheckCollisionPointRec(m, r);
+    bool hover = CheckCollisionPointRec(m, r) && WithinInputClip(m);
     if (hover && tip) UITooltip(tip);
     // translucent white over the frosted panel, brightening on hover/press
     float a = hover ? (IsMouseButtonDown(MOUSE_BUTTON_LEFT) ? 0.20f : 0.13f) : 0.07f;
@@ -256,7 +272,7 @@ bool UIButton(Rectangle r, const char* label, const char* tip) {
 
 bool UIToggle(Rectangle r, const char* label, bool state, const char* tip) {
     Vector2 m = GetMousePosition();
-    bool hover = CheckCollisionPointRec(m, r);
+    bool hover = CheckCollisionPointRec(m, r) && WithinInputClip(m);
     if (hover && tip) UITooltip(tip);
     float tw = UITextWidth(label, 18);
     if (state) {
@@ -280,7 +296,7 @@ bool UIToggle(Rectangle r, const char* label, bool state, const char* tip) {
 float UISliderLog(Rectangle r, float value, float minV, float maxV, bool* dragging,
                   const char* tip) {
     Vector2 m = GetMousePosition();
-    bool hover = CheckCollisionPointRec(m, r);
+    bool hover = CheckCollisionPointRec(m, r) && WithinInputClip(m);
     if (hover && tip) UITooltip(tip);
     if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) *dragging = true;
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) *dragging = false;

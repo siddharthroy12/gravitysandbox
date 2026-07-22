@@ -41,6 +41,13 @@ void UIDrawTooltip();
 // Pass BLANK as `border` for a borderless panel.
 void DrawPanel(Rectangle r, Color border);
 
+// Restricts widget hover/click to a vertical screen-space band. Use around
+// scrollable content so a row that has scrolled behind a fixed header or
+// button can't steal input meant for it (visual clipping alone doesn't stop
+// a Rectangle-based hit test from matching outside what's actually drawn).
+void UIBeginInputClip(float top, float bottom);
+void UIEndInputClip();
+
 // Borderless icon button: a line-drawn chevron with a rounded hover highlight.
 // `floating` draws a persistent pill background (for buttons over the scene).
 bool UIChevron(Rectangle r, bool pointsLeft, bool floating, const char* tip = nullptr);
