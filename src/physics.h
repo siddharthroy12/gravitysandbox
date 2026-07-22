@@ -5,7 +5,8 @@
 enum CollisionMode {
     COLLIDE_NONE = 0,    // bodies pass through each other
     COLLIDE_MERGE,       // perfectly inelastic merge
-    COLLIDE_DEBRIS       // merge, but part of the smaller body sprays out as fragments
+    COLLIDE_DEBRIS,      // merge, but part of the smaller body sprays out as fragments
+    COLLIDE_BOUNCE       // perfectly elastic rebound (black holes still swallow)
 };
 
 struct ImpactEvent {

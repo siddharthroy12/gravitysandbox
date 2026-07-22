@@ -257,6 +257,36 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
         float minDist = CollisionRadius(bodies[i].mass) + CollisionRadius(bodies[j].mass);
         if (dist >= minDist) return;
 
+        // elastic bounce: everything rebounds off everything, except a black
+        // hole still swallows whatever touches it (fall through to the merge)
+        if (collisionMode == COLLIDE_BOUNCE && !bodies[i].isBlackHole &&
+            !bodies[j].isBlackHole) {
+            Vector2 delta = Vector2Subtract(bodies[j].pos, bodies[i].pos);
+            float len = Vector2Length(delta);
+            Vector2 nrm = (len > 1e-5f) ? Vector2Scale(delta, 1.0f / len) : Vector2{1.0f, 0.0f};
+            float ma = bodies[i].mass, mb = bodies[j].mass;
+
+            // push overlapping bodies apart along the normal, lighter one more,
+            // so stacked bodies don't sink into each other under gravity
+            float overlap = (CollisionRadius(ma) + CollisionRadius(mb)) - len;
+            if (overlap > 0) {
+                bodies[i].pos = Vector2Subtract(bodies[i].pos,
+                                                Vector2Scale(nrm, overlap * mb / (ma + mb)));
+                bodies[j].pos = Vector2Add(bodies[j].pos,
+                                           Vector2Scale(nrm, overlap * ma / (ma + mb)));
+            }
+
+            // impulse along the normal, restitution 1; only while approaching,
+            // so duplicate pair tests from the grid can't double-bounce
+            float relN = Vector2DotProduct(Vector2Subtract(bodies[j].vel, bodies[i].vel), nrm);
+            if (relN < 0) {
+                float imp = -2.0f * relN / (1.0f / ma + 1.0f / mb);
+                bodies[i].vel = Vector2Subtract(bodies[i].vel, Vector2Scale(nrm, imp / ma));
+                bodies[j].vel = Vector2Add(bodies[j].vel, Vector2Scale(nrm, imp / mb));
+            }
+            return;
+        }
+
         // matter cannot enter a white hole: it only merges with another white
         // hole (they attract each other) or gets swallowed by a black hole
         bool iWH = bodies[i].isWhiteHole, jWH = bodies[j].isWhiteHole;

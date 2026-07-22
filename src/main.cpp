@@ -489,7 +489,7 @@ static void UpdateDrawFrame() {
     if (IsKeyPressed(KEY_T)) trailsOn = !trailsOn;
     if (IsKeyPressed(KEY_G)) gridOn = !gridOn;
     if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
-    if (IsKeyPressed(KEY_M)) collisionMode = (collisionMode + 1) % 3;
+    if (IsKeyPressed(KEY_M)) collisionMode = (collisionMode + 1) % 4;
     if (IsKeyPressed(KEY_D)) tidalDestruction = !tidalDestruction;
     if (IsKeyPressed(KEY_V)) vectorsOn = !vectorsOn;
     if (IsKeyPressed(KEY_B)) fieldOn = !fieldOn;
@@ -863,12 +863,39 @@ static void UpdateDrawFrame() {
                   "Two galaxies with black hole cores drifting into each other");
     patternButton({col2, ly, colW, 32}, "Comets", PAT_COMETS, "Comets on long elliptical orbits around a star");
     ly += 36;
-    patternButton({lpx, ly, colW, 32}, "Planet", PAT_PLANET,
-                  "A single planet sized by the MASS slider");
-    patternButton({col2, ly, colW, 32}, "Black Hole", PAT_BLACKHOLE,
-                  "A black hole with a swirling accretion disk; sized by the MASS slider");
+    patternButton({lpx, ly, colW, 32}, "Pinwheel", PAT_PINWHEEL,
+                  "A spiral galaxy with three winding arms around a bright core");
+    patternButton({col2, ly, colW, 32}, "Cluster", PAT_CLUSTER,
+                  "A globular star cluster churning in its own gravity");
     ly += 36;
-    patternButton({lpx, ly, colW, 32}, "White Hole", PAT_WHITEHOLE,
+    patternButton({lpx, ly, colW, 32}, "Saturn", PAT_SATURN,
+                  "A ringed planet with band gaps, a shepherd moon, and a big moon");
+    patternButton({col2, ly, colW, 32}, "Rosette", PAT_ROSETTE,
+                  "Klemperer rosette: elegant, symmetric, and doomed");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Tatooine", PAT_TATOOINE,
+                  "Planets orbiting a pair of suns");
+    patternButton({col2, ly, colW, 32}, "Supernova", PAT_SUPERNOVA,
+                  "An exploding shell of ejecta around a collapsed core");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Heart", PAT_HEART,
+                  "A heart at rest; gravity does the heartbreak");
+    patternButton({col2, ly, colW, 32}, "Smiley", PAT_SMILEY,
+                  "A grinning face at rest; enjoy it while it lasts");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Trojans", PAT_TROJANS,
+                  "A planet with asteroid swarms parked at its Lagrange points");
+    patternButton({col2, ly, colW, 32}, "Chaos", PAT_CHAOS,
+                  "Three bodies, no symmetry: a genuinely unpredictable three-body problem");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Vortex", PAT_VORTEX,
+                  "Counter-rotating dust halves shear into a churning vortex");
+    patternButton({col2, ly, colW, 32}, "Planet", PAT_PLANET,
+                  "A single planet sized by the MASS slider");
+    ly += 36;
+    patternButton({lpx, ly, colW, 32}, "Black Hole", PAT_BLACKHOLE,
+                  "A black hole with a swirling accretion disk; sized by the MASS slider");
+    patternButton({col2, ly, colW, 32}, "White Hole", PAT_WHITEHOLE,
                   "A white hole that repels matter and can't be entered; sized by the MASS slider");
     }   // end left panel
 
@@ -903,16 +930,19 @@ static void UpdateDrawFrame() {
     y += 12;   // section gap
     UISectionHeader("COLLISION (M)", px, y, pw);
     y += 26;
-    float w3 = (pw - 16) / 3;
-    if (UIToggle({px, y, w3, 32}, "None", collisionMode == COLLIDE_NONE,
+    if (UIToggle({px, y, halfW, 32}, "None", collisionMode == COLLIDE_NONE,
                  "Dots pass through each other"))
         collisionMode = COLLIDE_NONE;
-    if (UIToggle({px + w3 + 8, y, w3, 32}, "Merge", collisionMode == COLLIDE_MERGE,
+    if (UIToggle({px + halfW + 8, y, halfW, 32}, "Merge", collisionMode == COLLIDE_MERGE,
                  "Colliding dots combine, conserving mass and momentum"))
         collisionMode = COLLIDE_MERGE;
-    if (UIToggle({px + 2 * (w3 + 8), y, w3, 32}, "Debris", collisionMode == COLLIDE_DEBRIS,
+    y += 36;
+    if (UIToggle({px, y, halfW, 32}, "Debris", collisionMode == COLLIDE_DEBRIS,
                  "Merge, spraying part of the smaller dot out as fragments"))
         collisionMode = COLLIDE_DEBRIS;
+    if (UIToggle({px + halfW + 8, y, halfW, 32}, "Bounce", collisionMode == COLLIDE_BOUNCE,
+                 "Dots rebound elastically; black holes still swallow"))
+        collisionMode = COLLIDE_BOUNCE;
     y += 36;
     if (UIToggle({px, y, pw, 32}, "Tidal Destruction (D)", tidalDestruction,
                  "Heavy dots pull small dots apart on close passes"))
