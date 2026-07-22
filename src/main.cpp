@@ -362,6 +362,9 @@ struct AudioState {
     int mergeVoice = 0;
     bool ready = false;
     float mergeCooldown = 0.0f;
+    Sound bounce[4] = {};
+    int bounceVoice = 0;
+    float bounceCooldown = 0.0f;
 };
 
 static AudioState audio;
@@ -391,6 +394,9 @@ static void InitSandboxAudio() {
     if (!IsAudioDeviceReady()) return;
     audio.merge[0] = MakeTone(0.13f, 190.0f, 105.0f, 0.34f);
     for (int i = 1; i < 4; i++) audio.merge[i] = LoadSoundAlias(audio.merge[0]);
+    // short percussive knock, distinct from the merge tone's longer warm decay
+    audio.bounce[0] = MakeTone(0.06f, 340.0f, 150.0f, 0.3f);
+    for (int i = 1; i < 4; i++) audio.bounce[i] = LoadSoundAlias(audio.bounce[0]);
     audio.ready = true;
 }
 
@@ -411,10 +417,31 @@ static void PlayImpactAudio(const std::vector<ImpactEvent>& impacts) {
 
 }
 
+static void PlayBounceAudio(const std::vector<BounceEvent>& bounces) {
+    if (!audio.ready) return;
+    audio.bounceCooldown = fmaxf(0.0f, audio.bounceCooldown - GetFrameTime());
+
+    for (const BounceEvent& bounce : bounces) {
+        if (audio.bounceCooldown <= 0.0f) {
+            // harder hits: louder and a touch deeper, like a heavier knock
+            float level = log2f(bounce.energy / 200.0f + 1.0f);
+            float pitch = Clamp(1.3f - level * 0.10f, 0.55f, 1.5f);
+            float vol = Clamp(0.35f + level * 0.12f, 0.25f, 1.0f);
+            Sound sound = audio.bounce[audio.bounceVoice++ % 4];
+            SetSoundPitch(sound, pitch);
+            SetSoundVolume(sound, vol);
+            PlaySound(sound);
+            audio.bounceCooldown = 0.03f;
+        }
+    }
+}
+
 static void CloseSandboxAudio() {
     if (!audio.ready) return;
     for (int i = 1; i < 4; i++) UnloadSoundAlias(audio.merge[i]);
     UnloadSound(audio.merge[0]);
+    for (int i = 1; i < 4; i++) UnloadSoundAlias(audio.bounce[i]);
+    UnloadSound(audio.bounce[0]);
     CloseAudioDevice();
     audio.ready = false;
 }
@@ -666,12 +693,14 @@ static void UpdateDrawFrame() {
         if (recordTrail) trailTimer = 0.0f;
 
         std::vector<ImpactEvent> impacts;
+        std::vector<BounceEvent> bounces;
         const int substeps = 2;
         for (int s = 0; s < substeps; s++) {
             StepPhysics(bodies, stepDt / substeps, trailsOn, collisionMode, tidalDestruction,
-                        recordTrail && s == substeps - 1, (int)trailLength, &impacts);
+                        recordTrail && s == substeps - 1, (int)trailLength, &impacts, &bounces);
         }
         PlayImpactAudio(impacts);
+        PlayBounceAudio(bounces);
         SampleEnergy(stepDt);
         for (const ImpactEvent& im : impacts) {
             if (im.isBlackHole) continue;   // black holes swallow silently: no ripple

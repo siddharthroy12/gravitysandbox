@@ -136,7 +136,8 @@ Vector2 GravityFieldAt(const std::vector<Body>& bodies, Vector2 p) {
 // ---------- integration + collisions ----------
 
 void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisionMode,
-                 bool tidalDestruction, bool recordTrail, int trailLength, std::vector<ImpactEvent>* impacts) {
+                 bool tidalDestruction, bool recordTrail, int trailLength,
+                 std::vector<ImpactEvent>* impacts, std::vector<BounceEvent>* bounces) {
     size_t n = bodies.size();
     std::vector<Vector2> accel(n, {0, 0});
 
@@ -285,6 +286,11 @@ void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisi
                 float imp = -2.0f * relN / (1.0f / ma + 1.0f / mb);
                 bodies[i].vel = Vector2Subtract(bodies[i].vel, Vector2Scale(nrm, imp / ma));
                 bodies[j].vel = Vector2Add(bodies[j].vel, Vector2Scale(nrm, imp / mb));
+                if (bounces) {
+                    float mu = ma * mb / (ma + mb);
+                    Vector2 mid = Vector2Scale(Vector2Add(bodies[i].pos, bodies[j].pos), 0.5f);
+                    bounces->push_back({mid, 0.5f * mu * relN * relN});
+                }
             }
             return;
         }

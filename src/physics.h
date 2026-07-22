@@ -17,13 +17,21 @@ struct ImpactEvent {
     bool isBlackHole = false;   // survivor is a black hole: no shockwave ring
 };
 
+struct BounceEvent {
+    Vector2 pos;
+    float energy;    // 0.5 * reduced mass * closing speed^2, at the moment of impact
+};
+
 // Advance the simulation. Uses a Barnes-Hut quadtree for forces and a uniform
 // grid for collision pairs once the body count is large. If `impacts` is
-// non-null, one event is appended per merge (for visual effects).
+// non-null, one event is appended per merge (for visual effects); likewise
+// `bounces` gets one event per elastic collision in COLLIDE_BOUNCE mode.
 // `tidalDestruction` toggles the Roche-like pull-apart of small bodies
 // passing deep into a heavy body's gravity.
 void StepPhysics(std::vector<Body>& bodies, float dt, bool trailsOn, int collisionMode,
-                 bool tidalDestruction, bool recordTrail, int trailLength, std::vector<ImpactEvent>* impacts = nullptr);
+                 bool tidalDestruction, bool recordTrail, int trailLength,
+                 std::vector<ImpactEvent>* impacts = nullptr,
+                 std::vector<BounceEvent>* bounces = nullptr);
 
 // Reusable Barnes-Hut quadtree over a set of bodies: build once, then query
 // gravitational acceleration at any point in O(log n). StepPhysics uses this
