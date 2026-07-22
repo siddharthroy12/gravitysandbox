@@ -228,6 +228,9 @@ static int followId = -1;                           // body id the camera is loc
 static bool followCenter = false;                   // camera tracks the barycenter of all bodies
 static double lastClickTime = 0;
 static int lastClickBodyId = -1;
+static bool showControls = false;                   // keyboard/mouse controls overlay
+static bool leftCollapsed = false;                  // left panel folded to a corner tab
+static bool rightCollapsed = false;                 // right panel folded to a corner tab
 static std::vector<float> energyHistory;
 static float energySampleTimer = 0.0f;
 static constexpr float ENERGY_SAMPLE_INTERVAL = 0.125f;
@@ -348,17 +351,22 @@ static void UpdateDrawFrame() {
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
     camera.offset = {screenWidth / 2.0f, screenHeight / 2.0f};
-    // Panel content is 816px tall (rows below); cap the backdrop to the window.
-    const Rectangle panel = {screenWidth - 262.0f, 10.0f, 252.0f,
-                             fminf(520.0f, screenHeight - 20.0f)};
-    const Rectangle leftPanel = {10.0f, 10.0f, 252.0f, 398.0f};
-    const float infoW = 480.0f;
-    const Rectangle infoPanel = {screenWidth - infoW - 10.0f, screenHeight - 44.0f, infoW, 34.0f};
+    // Full-height panels flush with the screen edges; either can collapse to a
+    // small corner tab.
+    const Rectangle panel = {screenWidth - 252.0f, 0.0f, 252.0f, (float)screenHeight};
+    const Rectangle leftPanel = {0.0f, 0.0f, 252.0f, (float)screenHeight};
+    const Rectangle leftTab = {6.0f, 6.0f, 32.0f, 32.0f};
+    const Rectangle rightTab = {screenWidth - 38.0f, 6.0f, 32.0f, 32.0f};
     Vector2 mouseScreen = GetMousePosition();
     Vector2 mouseWorld = GetScreenToWorld2D(mouseScreen, camera);
-    bool mouseOverUI = CheckCollisionPointRec(mouseScreen, panel) ||
-                       CheckCollisionPointRec(mouseScreen, leftPanel) ||
-                       CheckCollisionPointRec(mouseScreen, infoPanel) ||
+    // controls overlay pops out to the left of the right panel, bottom-aligned
+    const Rectangle controlsPanel = {panel.x - 488.0f, screenHeight - 397.0f, 480.0f, 397.0f};
+    bool mouseOverUI = (rightCollapsed ? CheckCollisionPointRec(mouseScreen, rightTab)
+                                       : CheckCollisionPointRec(mouseScreen, panel)) ||
+                       (leftCollapsed ? CheckCollisionPointRec(mouseScreen, leftTab)
+                                      : CheckCollisionPointRec(mouseScreen, leftPanel)) ||
+                       (showControls && !rightCollapsed &&
+                        CheckCollisionPointRec(mouseScreen, controlsPanel)) ||
                        draggingSlider || draggingTrailSlider || draggingSpeedSlider;
 
     // pan with right or middle mouse drag (manual pan breaks follow mode)
@@ -393,11 +401,13 @@ static void UpdateDrawFrame() {
         patternMass = currentMass;
     }
 
-    // Esc cancels an in-progress launch or follow mode; the armed pattern stays
+    // Esc cancels an in-progress launch, follow mode, or the controls overlay;
+    // the armed pattern stays
     if (IsKeyPressed(KEY_ESCAPE)) {
         patternFlicking = false;
         followId = -1;
         followCenter = false;
+        showControls = false;
     }
 
     // left press: grab an existing body on a hit (double-click follows); on
@@ -484,6 +494,12 @@ static void UpdateDrawFrame() {
     if (IsKeyPressed(KEY_V)) vectorsOn = !vectorsOn;
     if (IsKeyPressed(KEY_B)) fieldOn = !fieldOn;
     if (IsKeyPressed(KEY_W)) curvatureOn = !curvatureOn;
+    // Tab: collapse both panels for a clean view, or bring both back
+    if (IsKeyPressed(KEY_TAB)) {
+        bool anyOpen = !leftCollapsed || !rightCollapsed;
+        leftCollapsed = anyOpen;
+        rightCollapsed = anyOpen;
+    }
 
     auto centerOnBodies = [&]() {
         if (bodies.empty()) return;
@@ -797,14 +813,21 @@ static void UpdateDrawFrame() {
     }
 
     // ---- Left UI panel (Mass and Patterns) ----
-    DrawPanel(leftPanel, UI_BORDER);
+    if (leftCollapsed) {
+        if (UIChevron(leftTab, false, true, "Expand the patterns panel")) leftCollapsed = false;
+    } else {
+    DrawPanel(leftPanel, BLANK);
+    if (UIChevron({leftPanel.width - 34.0f, 6.0f, 28.0f, 28.0f}, true, false,
+                  "Collapse the panel"))
+        leftCollapsed = true;
 
     float lpx = leftPanel.x + 14, lpw = leftPanel.width - 28;
     float ly = leftPanel.y + 12;
 
     const char* massTxt = TextFormat("%.0f", currentMass);
     UISectionHeader("MASS", lpx, ly, lpw - UITextWidth(massTxt, 18) - 10);
-    UIText(massTxt, leftPanel.x + leftPanel.width - 14 - UITextWidth(massTxt, 18), ly, 18, UI_VALUE);
+    // right margin leaves room for the collapse chevron above
+    UIText(massTxt, leftPanel.x + leftPanel.width - 44 - UITextWidth(massTxt, 18), ly, 18, UI_VALUE);
     ly += 26;
     currentMass = UISliderLog({lpx, ly, lpw, 24}, currentMass, MASS_MIN, MASS_MAX, &draggingSlider,
                               "Mass of newly placed dots (log scale; Up/Down keys work too)");
@@ -847,9 +870,16 @@ static void UpdateDrawFrame() {
     ly += 36;
     patternButton({lpx, ly, colW, 32}, "White Hole", PAT_WHITEHOLE,
                   "A white hole that repels matter and can't be entered; sized by the MASS slider");
+    }   // end left panel
 
     // ---- Right UI panel ----
-    DrawPanel(panel, UI_BORDER);
+    if (rightCollapsed) {
+        if (UIChevron(rightTab, true, true, "Expand the controls panel")) rightCollapsed = false;
+    } else {
+    DrawPanel(panel, BLANK);
+    if (UIChevron({panel.x + panel.width - 34.0f, 6.0f, 28.0f, 28.0f}, false, false,
+                  "Collapse the panel"))
+        rightCollapsed = true;
 
     float px = panel.x + 14, pw = panel.width - 28;
     float y = panel.y + 12;
@@ -927,34 +957,19 @@ static void UpdateDrawFrame() {
         energyHistory.clear();
         energySampleTimer = 0.0f;
     }
+    y += 36;
 
-    // ---- info panel (bottom-right, single line) ----
-    DrawPanel(infoPanel, UI_BORDER);
-
-    float cy = infoPanel.y + 9;
-
-    const float columnGap = 22.0f;
-    // Reserve worst-case width for each value so columns hold still as digit
-    // counts change, instead of reflowing every frame.
-    static const float fpsReserve = UITextWidth("9999", 15);
-    static const float bodiesReserve = UITextWidth("99999", 15);
-    static const float energyReserve = UITextWidth("+999.99%", 15);
-
-    // FPS (column starts at infoPanel.x + 14)
-    float fpsX = infoPanel.x + 14;
-    UIText("FPS", fpsX, cy, 15, UI_LABEL);
-    float fpsValueX = fpsX + UITextWidth("FPS", 15) + 6;
-    UIText(TextFormat("%d", GetFPS()), fpsValueX, cy, 15, UI_VALUE);
-
-    // Bodies (starts a fixed distance after the FPS value's reserved slot)
-    float bodiesX = fpsValueX + fpsReserve + columnGap;
-    UIText("BODIES", bodiesX, cy, 15, UI_LABEL);
-    float bodiesValueX = bodiesX + UITextWidth("BODIES", 15) + 6;
-    UIText(TextFormat("%d", (int)bodies.size()), bodiesValueX, cy, 15, UI_VALUE);
-
-    // Total Energy (starts a fixed distance after the Bodies value's reserved slot)
-    float energyX = bodiesValueX + bodiesReserve + columnGap;
-    UIText("ENERGY", energyX, cy, 15, UI_LABEL);
+    // ---- stats (FPS / bodies / energy + graph) ----
+    UISectionHeader("STATS", px, y, pw);
+    y += 26;
+    UIText("FPS", px, y, 15, UI_LABEL);
+    UIText(TextFormat("%d", GetFPS()), px + UITextWidth("FPS", 15) + 6, y, 15, UI_VALUE);
+    float bodiesX = px + pw / 2;
+    UIText("BODIES", bodiesX, y, 15, UI_LABEL);
+    UIText(TextFormat("%d", (int)bodies.size()), bodiesX + UITextWidth("BODIES", 15) + 6, y, 15,
+           UI_VALUE);
+    y += 22;
+    UIText("ENERGY", px, y, 15, UI_LABEL);
     const char* deltaTxt = "0.00%";
     Color energyCol = UI_VALUE;
     if (!energyHistory.empty()) {
@@ -965,24 +980,18 @@ static void UpdateDrawFrame() {
             energyCol = CLITERAL(Color){100, 210, 255, 255};
         }
     }
-    float energyValueX = energyX + UITextWidth("ENERGY", 15) + 6;
-    UIText(deltaTxt, energyValueX, cy, 15, energyCol);
-
-    // Energy tooltip on hover
-    float energyLabelW = UITextWidth("ENERGY", 15) + 6 + energyReserve;
-    Rectangle energyRect = {energyX, infoPanel.y, energyLabelW + 10, infoPanel.height};
-    if (CheckCollisionPointRec(mouseScreen, energyRect)) {
+    UIText(deltaTxt, px + UITextWidth("ENERGY", 15) + 6, y, 15, energyCol);
+    if (CheckCollisionPointRec(mouseScreen, {px, y, pw / 2, 18})) {
         UITooltip("Kinetic + potential energy of the whole system");
     }
+    y += 22;
+    DrawEnergyGraph({px, y, pw, 22});
+    y += 30;
 
-    // Energy Graph (starts a fixed distance after the Energy value's reserved slot)
-    float graphX = energyValueX + energyReserve + columnGap;
-    float graphW = (infoPanel.x + infoPanel.width - 14) - graphX;
-    float graphH = 20.0f;
-    float graphY = infoPanel.y + (infoPanel.height - graphH) / 2.0f;
-    if (graphW > 10.0f) {
-        DrawEnergyGraph({graphX, graphY, graphW, graphH});
-    }
+    if (UIToggle({px, y, pw, 32}, "View Controls", showControls,
+                 "Every mouse and keyboard control"))
+        showControls = !showControls;
+    }   // end right panel
 
     // ---- paused banner (top-center) ----
     if (paused) {
@@ -1005,12 +1014,43 @@ static void UpdateDrawFrame() {
         UIText(followTxt, banner.x + 18, banner.y + 10, 20, UI_VALUE);
     }
 
-    // ---- hint bar (bottom-left) ----
-    const char* hints = "Click: place dot     Drag: flick-launch     Double-click: follow     Right / middle drag: pan     Wheel: zoom     Space: pause";
-    float htw = UITextWidth(hints, 16);
-    Rectangle hintBar = {10, screenHeight - 44.0f, htw + 28.0f, 34};
-    DrawPanel(hintBar, UI_BORDER);
-    UIText(hints, hintBar.x + 14, hintBar.y + 9, 16, UI_LABEL);
+    // ---- controls overlay (left of the right panel) ----
+    if (showControls && !rightCollapsed) {
+        DrawPanel(controlsPanel, BLANK);
+        float cx = controlsPanel.x + 14, cw = controlsPanel.width - 28;
+        float yy = controlsPanel.y + 12;
+        auto row = [&](float x, float y, float keyW, const char* key, const char* action) {
+            UIText(key, x, y, 15, UI_VALUE);
+            UIText(action, x + keyW, y, 15, UI_LABEL);
+        };
+        UISectionHeader("MOUSE", cx, yy, cw);
+        yy += 24;
+        row(cx, yy, 160, "Click", "Place the armed pattern"); yy += 21;
+        row(cx, yy, 160, "Drag", "Flick-launch the pattern"); yy += 21;
+        row(cx, yy, 160, "Drag a dot", "Move it"); yy += 21;
+        row(cx, yy, 160, "Double-click a dot", "Follow it"); yy += 21;
+        row(cx, yy, 160, "Right / middle drag", "Pan"); yy += 21;
+        row(cx, yy, 160, "Wheel", "Zoom"); yy += 21;
+        yy += 10;
+        UISectionHeader("KEYBOARD", cx, yy, cw);
+        yy += 24;
+        static const struct { const char* key; const char* action; } shortcuts[] = {
+            {"Space", "Pause"},          {".", "Step one frame"},
+            {"Up / Down", "Adjust mass"},{"T", "Trails"},
+            {"G", "Grid"},               {"V", "Velocity vectors"},
+            {"B", "Gravity field"},      {"W", "Space curvature"},
+            {"M", "Collision mode"},     {"D", "Tidal destruction"},
+            {"H", "Center on dots"},     {"J", "Follow center"},
+            {"R", "Reset view"},         {"F", "Fullscreen"},
+            {"C", "Clear canvas"},       {"Esc", "Cancel / stop follow"},
+            {"Tab", "Collapse both panels"},
+        };
+        float colW2 = cw / 2;
+        for (int i = 0; i < (int)(sizeof(shortcuts) / sizeof(shortcuts[0])); i++) {
+            row(cx + (i % 2) * colW2, yy, 90, shortcuts[i].key, shortcuts[i].action);
+            if (i % 2 == 1) yy += 21;
+        }
+    }
 
     // tooltips registered by hovered widgets this frame, drawn on top of all UI
     UIDrawTooltip();

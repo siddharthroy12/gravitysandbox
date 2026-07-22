@@ -173,11 +173,38 @@ void DrawPanel(Rectangle r, Color border) {
                          r.width / g_bdLogicalW * texW,
                          -(r.height / g_bdLogicalH * texH)};
         DrawTexturePro(g_backdrop, src, r, {0, 0}, 0, WHITE);
-        DrawRectangleRec(r, CLITERAL(Color){13, 13, 15, 170});
+        DrawRectangleRec(r, CLITERAL(Color){13, 13, 15, 110});
     } else {
         DrawRectangleRec(r, UI_BG);
     }
-    DrawRectangleLinesEx(r, 1, border);
+    if (border.a != 0) DrawRectangleLinesEx(r, 1, border);
+}
+
+bool UIChevron(Rectangle r, bool pointsLeft, bool floating, const char* tip) {
+    Vector2 m = GetMousePosition();
+    bool hover = CheckCollisionPointRec(m, r);
+    if (hover && tip) UITooltip(tip);
+
+    if (floating) {
+        Color bg = hover ? UI_BTN_HOVER : CLITERAL(Color){19, 19, 22, 230};
+        if (hover && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) bg = UI_BTN_PRESS;
+        DrawRectangleRounded(r, 0.35f, 6, bg);
+    } else if (hover) {
+        DrawRectangleRounded(r, 0.35f, 6,
+                             IsMouseButtonDown(MOUSE_BUTTON_LEFT) ? UI_BTN_PRESS : UI_BTN_HOVER);
+    }
+
+    float cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+    float s = fminf(r.width, r.height) * 0.18f;   // chevron half-height
+    float dir = pointsLeft ? -1.0f : 1.0f;
+    Vector2 point = {cx + dir * s * 0.6f, cy};
+    Color c = hover ? UI_VALUE : UI_LABEL;
+    DrawLineEx({cx - dir * s * 0.6f, cy - s}, point, 2.0f, c);
+    DrawLineEx({cx - dir * s * 0.6f, cy + s}, point, 2.0f, c);
+
+    bool clicked = hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+    if (clicked) PlayClick(1.0f);
+    return clicked;
 }
 
 // ---------- tooltips ----------

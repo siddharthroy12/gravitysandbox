@@ -38,7 +38,12 @@ float UITextWidth(const char* text, float size);
 void UITooltip(const char* text);
 void UIDrawTooltip();
 
+// Pass BLANK as `border` for a borderless panel.
 void DrawPanel(Rectangle r, Color border);
+
+// Borderless icon button: a line-drawn chevron with a rounded hover highlight.
+// `floating` draws a persistent pill background (for buttons over the scene).
+bool UIChevron(Rectangle r, bool pointsLeft, bool floating, const char* tip = nullptr);
 void UISectionHeader(const char* label, float x, float y, float width);
 bool UIButton(Rectangle r, const char* label, const char* tip = nullptr);
 bool UIToggle(Rectangle r, const char* label, bool state, const char* tip = nullptr);
